@@ -46,6 +46,7 @@ class RegisterView(APIView):
       elif phone_number:
         existing_user = User.objects.filter(phone_number=phone_number).first()
 
+
       # Handle existing user
       if existing_user:
         if existing_user.is_active and existing_user.is_verified:

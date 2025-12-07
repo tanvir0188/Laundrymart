@@ -1,6 +1,6 @@
 from django.core.mail import send_mail
 
-from landrymart import settings
+from laundrymart import settings
 
 
 def send_otp_for_email_verification(email, otp):
