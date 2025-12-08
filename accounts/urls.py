@@ -6,7 +6,9 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
-from .views import LoginView, VerifyOTPView, ResendOTPView, forget_password_otp, ChangePasswordAPIView
+from .views import LoginView, VerifyOTPView, ResendOTPView, change_current_password, delete_account, \
+  forget_password_otp, \
+  ChangePasswordAPIView
 
 urlpatterns = [
     path('login', LoginView.as_view(), name='token_obtain_pair'),
@@ -15,6 +17,10 @@ urlpatterns = [
     path('resend-otp', ResendOTPView.as_view(), name='resend_otp'),
     path('forget-password', forget_password_otp, name='forget_password'),
     path('change-password', ChangePasswordAPIView.as_view(), name='password_change'),
+    path('change-current-password', change_current_password, name='change_current_password'),
+    path('customer-profile', views.CustomerProfileAPIView.as_view(), name='customer_profile'),
+    path('vendor-profile', views.VendorProfileAPIView.as_view(), name='vendor_profile'),
+    path('delete-account', delete_account, name='delete_account'),
 
     path('register', views.RegisterView.as_view(), name='register'),
     path('logout', views.LogoutAPIView.as_view(), name='logout'),

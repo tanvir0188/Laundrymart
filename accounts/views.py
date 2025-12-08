@@ -13,12 +13,14 @@ from rest_framework.response import Response
 from rest_framework import serializers, status
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from laundrymart.permissions import IsCustomer, IsStaff
 from message_utils.email_utils import send_otp_for_email_verification, send_otp_for_password, \
   send_otp_for_sms_password, send_otp_for_sms_verification
 from .models import User
-from .serializers import CreateUserSerializer, ForgetPasswordSerializer, LogoutSerializer, OTPSerializer, \
+from .serializers import CreateUserSerializer, CustomerProfileSerializer, ForgetPasswordSerializer, LogoutSerializer, \
+  OTPSerializer, \
   ResendOTPSerializer, \
-  ChangePasswordSerializer
+  ChangePasswordSerializer, VendorProfileSerializer
 from drf_spectacular.utils import OpenApiExample, OpenApiRequest, extend_schema, OpenApiResponse, inline_serializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -146,7 +148,8 @@ class VerifyOTPView(APIView):
         "id": user.id,
         "email": user.email,
         "phone_number": user.phone_number,
-        "full_name": user.full_name
+        "full_name": user.full_name,
+        "role": 'Customer' if not user.is_staff else 'Vendor'
       },
       "tokens": {
         "refresh": str(refresh),
@@ -233,6 +236,30 @@ class ChangePasswordAPIView(APIView):
     user.save()
 
     return Response({'message': 'Password changed successfully.'}, status=200)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def change_current_password(request):
+  user = request.user
+  current_password = request.data.get('current_password')
+  new_password = request.data.get('new_password')
+
+  if not current_password or not new_password:
+    return Response(
+      {"error": "Both current_password and new_password are required."},
+      status=status.HTTP_400_BAD_REQUEST
+    )
+
+  if not user.check_password(current_password):
+    return Response(
+      {"error": "Current password is incorrect."},
+      status=status.HTTP_400_BAD_REQUEST
+    )
+
+  user.set_password(new_password)
+  user.save()
+
+  return Response({'message': 'Password changed successfully.'}, status=200)
 
 @extend_schema(
   request=ForgetPasswordSerializer,
@@ -343,7 +370,8 @@ class LoginView(APIView):
         "id": user.id,
         "email": user.email,
         "phone_number": user.phone_number,
-        "full_name": user.full_name
+        "full_name": user.full_name,
+        "role": 'Customer' if not user.is_staff else 'Vendor'
       },
       "tokens": {
         "refresh": str(refresh),
@@ -373,4 +401,61 @@ class LogoutAPIView(APIView):
     first_message = messages[0] if isinstance(messages, list) else messages
     error_message = f"{readable_field}: {first_message}"
     return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+class CustomerProfileAPIView(APIView):
+  permission_classes = [IsCustomer]
+  def get(self, request):
+    user = request.user
+    serializer = CustomerProfileSerializer(user)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+  @extend_schema(
+    request=CustomerProfileSerializer,
+    responses={200: CustomerProfileSerializer, 400: 'Validation Error'}
+  )
+  def patch(self, request):
+    user = request.user
+    serializer = CustomerProfileSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+      serializer.save()
+      return Response(serializer.data, status=status.HTTP_200_OK)
+    errors = serializer.errors
+    field, messages = next(iter(errors.items()))
+    readable_field = field.replace('_', ' ').capitalize()
+    first_message = messages[0] if isinstance(messages, list) else messages
+    error_message = f"{readable_field}: {first_message}"
+    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+class VendorProfileAPIView(APIView):
+  permission_classes = [IsStaff]
+
+  def get(self, request):
+    user = request.user
+    serializer = VendorProfileSerializer(user)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+  @extend_schema(
+    request=VendorProfileSerializer,
+    responses={200: VendorProfileSerializer, 400: 'Validation Error'}
+  )
+  def patch(self, request):
+    user = request.user
+    serializer = VendorProfileSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+      serializer.save()
+      return Response(serializer.data, status=status.HTTP_200_OK)
+    errors = serializer.errors
+    field, messages = next(iter(errors.items()))
+    readable_field = field.replace('_', ' ').capitalize()
+    first_message = messages[0] if isinstance(messages, list) else messages
+    error_message = f"{readable_field}: {first_message}"
+    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_account(request):
+  user = request.user
+  user.delete()
+  return Response({'message': 'Account deleted successfully.'}, status=status.HTTP_200_OK)
+
 

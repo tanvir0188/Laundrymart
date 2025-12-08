@@ -47,10 +47,73 @@ class User(AbstractUser):
   lat = models.CharField(max_length=100, blank=True, null=True)
   lng = models.CharField(max_length=100,blank=True, null=True)
 
+  secondary_location=models.TextField(blank=True, null=True)
+  secondary_lat = models.CharField(max_length=100, blank=True, null=True)
+  secondary_lng = models.CharField(max_length=100,blank=True, null=True)
+
   is_active = models.BooleanField(default=False)
   otp = models.CharField(blank=True, null=True, max_length=4)
   otp_expires=models.DateTimeField(blank=True, null=True)
   is_verified = models.BooleanField(default=False)
+
+  is_tester=models.BooleanField(default=False)
+
+  laundrymart_name=models.CharField(max_length=255, blank=True, null=True)
+
+  price_per_pound=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  service_fee=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  minimum_order_weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  daily_capacity_limit=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_sunday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_sunday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_monday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_monday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_tuesday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_tuesday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_wednesday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_wednesday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_thursday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_thursday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_friday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_friday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  turnaround_time_minimum_saturday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  turnaround_time_maximum_saturday = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
+  operating_hours_start_sunday = models.TimeField(blank=True, null=True)
+  operating_hours_end_sunday = models.TimeField(blank=True, null=True)
+  is_closed_sunday = models.BooleanField(default=False)
+
+  operating_hours_start_monday = models.TimeField(blank=True, null=True)
+  operating_hours_end_monday = models.TimeField(blank=True, null=True)
+  is_closed_monday = models.BooleanField(default=False)
+
+  operating_hours_start_tuesday = models.TimeField(blank=True, null=True)
+  operating_hours_end_tuesday = models.TimeField(blank=True, null=True)
+  is_closed_tuesday = models.BooleanField(default=False)
+
+  operating_hours_start_wednesday = models.TimeField(blank=True, null=True)
+  operating_hours_end_wednesday = models.TimeField(blank=True, null=True)
+  is_closed_wednesday = models.BooleanField(default=False)
+
+  operating_hours_start_thursday = models.TimeField(blank=True, null=True)
+  operating_hours_end_thursday = models.TimeField(blank=True, null=True)
+  is_closed_thursday = models.BooleanField(default=False)
+
+  operating_hours_start_friday = models.TimeField(blank=True, null=True)
+  operating_hours_end_friday = models.TimeField(blank=True, null=True)
+  is_closed_friday = models.BooleanField(default=False)
+
+  operating_hours_start_saturday = models.TimeField(blank=True, null=True)
+  operating_hours_end_saturday = models.TimeField(blank=True, null=True)
+  is_closed_saturday = models.BooleanField(default=False)
 
   created_at=models.DateTimeField(auto_now_add=True)
   updated_at=models.DateTimeField(auto_now=True)

@@ -13,14 +13,19 @@ from .models import User
 import random
 
 class CreateUserSerializer(serializers.ModelSerializer):
+  role = serializers.ChoiceField(choices=['Customer', 'Vendor'], write_only=True)
   class Meta:
     model = User
-    fields = ['email', 'phone_number', 'password']
+    fields = ['email', 'phone_number', 'role', 'password']
     extra_kwargs = {'password': {'write_only': True}}
 
   def validate(self, attrs):
     email = attrs.get('email')
     phone_number = attrs.get('phone_number')
+    role = attrs.get('role')
+    if role not in ['Customer', 'Vendor']:
+      raise serializers.ValidationError({"role": "Role must be either 'Customer' or 'Vendor'."})
+
 
     if not email and not phone_number:
       raise serializers.ValidationError("Either email or phone number must be provided.")
@@ -51,6 +56,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
   def create(self, validated_data):
     email = validated_data.get('email')
     phone_number = validated_data.get('phone_number')
+    role = validated_data.get('role')
 
     password = validated_data.pop('password')
 
@@ -81,6 +87,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
       is_verified=False,
       otp=str(otp),
       otp_expires=otp_expiry,
+      is_staff=False if role == 'Customer' else True,
     )
     user.set_password(password)
     user.save()
@@ -154,3 +161,31 @@ class OTPSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
   refresh_token = serializers.CharField(required=True)
+
+class CustomerProfileSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = User
+    fields = ['id', 'full_name', 'email', 'phone_number', 'image', 'location', 'lat', 'lng']
+
+class VendorProfileSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = User
+    fields = ['id', 'full_name', 'email', 'phone_number', 'image', 'location', 'lat', 'lng',
+              'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight',
+              'daily_capacity_limit',
+              'turnaround_time_minimum_sunday', 'turnaround_time_maximum_sunday',
+              'turnaround_time_minimum_monday', 'turnaround_time_maximum_monday',
+              'turnaround_time_minimum_tuesday', 'turnaround_time_maximum_tuesday',
+              'turnaround_time_minimum_wednesday', 'turnaround_time_maximum_wednesday',
+              'turnaround_time_minimum_thursday', 'turnaround_time_maximum_thursday',
+              'turnaround_time_minimum_friday', 'turnaround_time_maximum_friday',
+              'turnaround_time_minimum_saturday', 'turnaround_time_maximum_saturday',
+
+              'operating_hours_start_sunday', 'operating_hours_end_sunday', 'is_closed_sunday',
+              'operating_hours_start_monday', 'operating_hours_end_monday', 'is_closed_monday',
+              'operating_hours_start_tuesday', 'operating_hours_end_tuesday', 'is_closed_tuesday',
+              'operating_hours_start_wednesday', 'operating_hours_end_wednesday', 'is_closed_wednesday',
+              'operating_hours_start_thursday', 'operating_hours_end_thursday', 'is_closed_thursday',
+              'operating_hours_start_friday', 'operating_hours_end_friday', 'is_closed_friday',
+              'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
+              ]
