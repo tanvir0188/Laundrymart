@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -34,11 +35,6 @@ class CreateUserSerializer(serializers.ModelSerializer):
       if User.objects.filter(email=email).exists():
         raise serializers.ValidationError({"email": "An account with this email already exists."})
 
-    # Validate phone if present
-    if phone_number:
-      if not phone_number.isdigit():
-        raise serializers.ValidationError({"phone_number": "Phone number must contain digits only."})
-
       if User.objects.filter(phone_number=phone_number).exists():
         raise serializers.ValidationError({"phone_number": "An account with this phone number already exists."})
 
@@ -63,11 +59,9 @@ class CreateUserSerializer(serializers.ModelSerializer):
     otp_expiry = timezone.now() + timedelta(minutes=1)
 
     # Check if existing inactive user
-    existing_user = None
-    if email:
-      existing_user = User.objects.filter(email=email).first()
-    elif phone_number:
-      existing_user = User.objects.filter(phone_number=phone_number).first()
+    existing_user = User.objects.filter(
+      Q(email=email) | Q(phone_number=phone_number)
+    ).first()
 
     if existing_user:
       if existing_user.is_active:
@@ -80,7 +74,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
       return existing_user
 
     # Create a new user
-    user = User.objects.create(
+    user = User(
       email=email,
       phone_number=phone_number,
       is_active=False,
@@ -144,18 +138,18 @@ class OTPSerializer(serializers.Serializer):
     return attrs
 
 
-class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
-  def validate(self, attrs):
-    data = super().validate(attrs)
-
-    user = self.user
-
-    # Prepare extra user info (outside token)
-    data['login_user_info'] = {
-      'name': user.full_name if user.full_name else '',
-      'image': user.image.url if user.image else None
-    }
-    return data
+# class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+#   def validate(self, attrs):
+#     data = super().validate(attrs)
+#
+#     user = self.user
+#
+#     # Prepare extra user info (outside token)
+#     data['login_user_info'] = {
+#       'name': user.full_name if user.full_name else '',
+#       'image': user.image.url if user.image else None
+#     }
+#     return data
 
 
 class LogoutSerializer(serializers.Serializer):

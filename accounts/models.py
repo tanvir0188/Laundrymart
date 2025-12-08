@@ -6,22 +6,29 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 
 class CustomUserManager(BaseUserManager):
 
-  def _create_user(self, password, email=None, phone_number=None , full_name=None, **extra_fields):
-    if not email:
-      raise ValueError('Users must have an email address')
+  def _create_user(self, password, email=None, phone_number=None, full_name=None, **extra_fields):
+    if not email and not phone_number:
+      raise ValueError('Either email or phone number must be provided.')
 
-    email = self.normalize_email(email)
-    user = self.model(email=email,phone_number=phone_number, full_name=full_name, **extra_fields)
+    if email:
+      email = self.normalize_email(email)
+
+    user = self.model(
+      email=email,
+      phone_number=phone_number,
+      full_name=full_name,
+      **extra_fields
+    )
     user.set_password(password)
     user.save(using=self._db)
     return user
 
-  def create_user(self, password,email=None, phone_number=None,full_name=None, **extra_fields):
+  def create_user(self, password, email=None, phone_number=None, full_name=None, **extra_fields):
     extra_fields.setdefault('is_superuser', False)
     extra_fields.setdefault('is_staff', False)
     return self._create_user(password, email, phone_number, full_name, **extra_fields)
 
-  def create_superuser(self, password,email=None, phone_number=None,full_name=None, **extra_fields):
+  def create_superuser(self,password, email=None, phone_number=None, full_name=None, **extra_fields):
     extra_fields.setdefault('is_superuser', True)
     extra_fields.setdefault('is_staff', True)
     extra_fields.setdefault('is_active', True)
@@ -31,12 +38,14 @@ class CustomUserManager(BaseUserManager):
 
     return self._create_user(password, email, phone_number, full_name, **extra_fields)
 
-
 class User(AbstractUser):
+  username = None
   full_name = models.CharField(blank=True, max_length=255, null=True)
   email = models.EmailField(blank=True, null=True, unique=True, db_index=True)
   phone_number = models.CharField(blank=True, null=True, unique=True, max_length=30)
   location=models.TextField(blank=True, null=True)
+  lat = models.CharField(max_length=100, blank=True, null=True)
+  lng = models.CharField(max_length=100,blank=True, null=True)
 
   is_active = models.BooleanField(default=False)
   otp = models.CharField(blank=True, null=True, max_length=4)

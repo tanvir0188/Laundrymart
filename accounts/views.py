@@ -1,13 +1,16 @@
 import random
 from datetime import timedelta
 
+from django.contrib.auth import authenticate
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from message_utils.email_utils import send_otp_for_email_verification, send_otp_for_password, \
@@ -15,8 +18,8 @@ from message_utils.email_utils import send_otp_for_email_verification, send_otp_
 from .models import User
 from .serializers import CreateUserSerializer, ForgetPasswordSerializer, LogoutSerializer, OTPSerializer, \
   ResendOTPSerializer, \
-  ChangePasswordSerializer, MyTokenObtainPairSerializer
-from drf_spectacular.utils import extend_schema, OpenApiResponse
+  ChangePasswordSerializer
+from drf_spectacular.utils import OpenApiExample, OpenApiRequest, extend_schema, OpenApiResponse, inline_serializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
@@ -41,10 +44,9 @@ class RegisterView(APIView):
       existing_user = None
 
       # Check for existing record by email or phone
-      if email:
-        existing_user = User.objects.filter(email=email).first()
-      elif phone_number:
-        existing_user = User.objects.filter(phone_number=phone_number).first()
+      existing_user = User.objects.filter(
+        Q(email=email) | Q(phone_number=phone_number)
+      ).first()
 
 
       # Handle existing user
@@ -139,12 +141,16 @@ class VerifyOTPView(APIView):
     access = refresh.access_token
 
     data = {
-      'message': 'OTP verified successfully.',
-      'access': str(access),
-      'refresh': str(refresh),
-      'login_user_info': {
-        'name': user.full_name or f'{user.first_name} {user.last_name}'.strip(),
-        'image': user.image.url if user.image else None
+      "message": "Otp Verification successful.",
+      "user": {
+        "id": user.id,
+        "email": user.email,
+        "phone_number": user.phone_number,
+        "full_name": user.full_name
+      },
+      "tokens": {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token)
       }
     }
 
@@ -278,8 +284,72 @@ def forget_password_otp(request):
     'status': 'success'
   }, status=200)
 
-class MyTokenObtainPairView(TokenObtainPairView):
-  serializer_class = MyTokenObtainPairSerializer
+class LoginView(APIView):
+  @extend_schema(
+    request=inline_serializer(
+      name="LoginPayload",
+      fields={
+        "email_or_phone": serializers.CharField(),
+        "password": serializers.CharField()
+      }
+    ),
+    responses={
+      200: inline_serializer(
+        name="LoginSuccess",
+        fields={
+          "message": serializers.CharField(),
+          "user": serializers.DictField(),
+          "tokens": serializers.DictField(),
+        }
+      ),
+      400: inline_serializer(
+        name="LoginError",
+        fields={
+          "error": serializers.CharField()
+        }
+      ),
+    }
+  )
+  def post(self, request):
+    username = request.data.get("email_or_phone")
+    password = request.data.get("password")
+
+    if not username or not password:
+      return Response(
+        {"error": "email_or_phone and password are required."},
+        status=status.HTTP_400_BAD_REQUEST
+      )
+
+    user = authenticate(request, username=username, password=password)
+
+    if not user:
+      return Response(
+        {"error": "Invalid credentials."},
+        status=status.HTTP_400_BAD_REQUEST
+      )
+
+    if not user.is_active:
+      return Response(
+        {"error": "Account is not active."},
+        status=status.HTTP_400_BAD_REQUEST
+      )
+
+    # Generate JWT
+    refresh = RefreshToken.for_user(user)
+
+    return Response({
+      "message": "Login successful.",
+      "user": {
+        "id": user.id,
+        "email": user.email,
+        "phone_number": user.phone_number,
+        "full_name": user.full_name
+      },
+      "tokens": {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token)
+      }
+    })
 
 class LogoutAPIView(APIView):
   permission_classes = [IsAuthenticated]
