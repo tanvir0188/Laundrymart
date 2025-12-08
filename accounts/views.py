@@ -17,10 +17,11 @@ from laundrymart.permissions import IsCustomer, IsStaff
 from message_utils.email_utils import send_otp_for_email_verification, send_otp_for_password, \
   send_otp_for_sms_password, send_otp_for_sms_verification
 from .models import User
-from .serializers import CreateUserSerializer, CustomerProfileSerializer, ForgetPasswordSerializer, LogoutSerializer, \
+from .serializers import CreateUserSerializer, CustomerProfileSerializer, CustomerSettingSerializer, \
+  ForgetPasswordSerializer, LogoutSerializer, \
   OTPSerializer, \
   ResendOTPSerializer, \
-  ChangePasswordSerializer, VendorProfileSerializer
+  ChangePasswordSerializer, VendorProfileSerializer, VendorSettingSerializer
 from drf_spectacular.utils import OpenApiExample, OpenApiRequest, extend_schema, OpenApiResponse, inline_serializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -406,6 +407,7 @@ class CustomerProfileAPIView(APIView):
   permission_classes = [IsCustomer]
   def get(self, request):
     user = request.user
+
     serializer = CustomerProfileSerializer(user)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -457,5 +459,56 @@ def delete_account(request):
   user = request.user
   user.delete()
   return Response({'message': 'Account deleted successfully.'}, status=status.HTTP_200_OK)
+
+class ManageVendorSettingsAPIView(APIView):
+  permission_classes = [IsStaff]
+
+  def get(self, request):
+    user = request.user
+
+    serializer = VendorSettingSerializer(user)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+  @extend_schema(
+    request=VendorSettingSerializer,
+    responses={200: VendorSettingSerializer, 400: 'Validation Error'}
+  )
+  def patch(self, request):
+    user = request.user
+    serializer = VendorSettingSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+      serializer.save()
+      return Response(serializer.data, status=status.HTTP_200_OK)
+    errors = serializer.errors
+    field, messages = next(iter(errors.items()))
+    readable_field = field.replace('_', ' ').capitalize()
+    first_message = messages[0] if isinstance(messages, list) else messages
+    error_message = f"{readable_field}: {first_message}"
+    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+class ManageCustomerSettingsAPIView(APIView):
+  permission_classes = [IsCustomer]
+
+  def get(self, request):
+    user = request.user
+
+    serializer = CustomerSettingSerializer(user)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+  @extend_schema(
+    request=CustomerSettingSerializer,
+    responses={200: CustomerSettingSerializer, 400: 'Validation Error'}
+  )
+  def patch(self, request):
+    user = request.user
+    serializer = CustomerSettingSerializer(user, data=request.data, partial=True)
+    if serializer.is_valid():
+      serializer.save()
+      return Response(serializer.data, status=status.HTTP_200_OK)
+    errors = serializer.errors
+    field, messages = next(iter(errors.items()))
+    readable_field = field.replace('_', ' ').capitalize()
+    first_message = messages[0] if isinstance(messages, list) else messages
+    error_message = f"{readable_field}: {first_message}"
+    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
 
 

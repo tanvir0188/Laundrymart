@@ -38,6 +38,11 @@ class CustomUserManager(BaseUserManager):
 
     return self._create_user(password, email, phone_number, full_name, **extra_fields)
 
+PREFERENCE_CHOICES = [
+  ('Auto-assign another LaundryMart (fastest)', 'Auto-assign another LaundryMart (fastest)'),
+  ('Ask me to choose (I’ll decide each time)', 'Ask me to choose (I’ll decide each time)'),
+]
+
 class User(AbstractUser):
   username = None
   full_name = models.CharField(blank=True, max_length=255, null=True)
@@ -114,6 +119,11 @@ class User(AbstractUser):
   operating_hours_start_saturday = models.TimeField(blank=True, null=True)
   operating_hours_end_saturday = models.TimeField(blank=True, null=True)
   is_closed_saturday = models.BooleanField(default=False)
+
+  push_and_email_alerts = models.BooleanField(default=True)
+  auto_accept_orders = models.BooleanField(default=False)
+
+  preference = models.CharField(max_length=50, blank=True, null=True, choices=PREFERENCE_CHOICES, default='Auto-assign another LaundryMart (fastest)')
 
   created_at=models.DateTimeField(auto_now_add=True)
   updated_at=models.DateTimeField(auto_now=True)

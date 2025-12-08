@@ -2,11 +2,12 @@
 from django.urls import path
 from . import views
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
     TokenRefreshView,
 )
 
-from .views import LoginView, VerifyOTPView, ResendOTPView, change_current_password, delete_account, \
+from .views import LoginView, ManageCustomerSettingsAPIView, ManageVendorSettingsAPIView, VerifyOTPView, ResendOTPView, \
+  change_current_password, \
+  delete_account, \
   forget_password_otp, \
   ChangePasswordAPIView
 
@@ -21,6 +22,9 @@ urlpatterns = [
     path('customer-profile', views.CustomerProfileAPIView.as_view(), name='customer_profile'),
     path('vendor-profile', views.VendorProfileAPIView.as_view(), name='vendor_profile'),
     path('delete-account', delete_account, name='delete_account'),
+
+    path('manage-vendor-setting', ManageVendorSettingsAPIView.as_view(), name='manage_vendor_setting'),
+    path('manage-customer-setting', ManageCustomerSettingsAPIView.as_view(), name='manage_customer_setting'),
 
     path('register', views.RegisterView.as_view(), name='register'),
     path('logout', views.LogoutAPIView.as_view(), name='logout'),

@@ -189,3 +189,13 @@ class VendorProfileSerializer(serializers.ModelSerializer):
               'operating_hours_start_friday', 'operating_hours_end_friday', 'is_closed_friday',
               'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
               ]
+
+class VendorSettingSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = User
+    fields = ['push_and_email_alerts', 'auto_accept_orders']
+
+class CustomerSettingSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = User
+    fields = ['push_and_email_alerts', 'preference']
