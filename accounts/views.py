@@ -238,6 +238,20 @@ class ChangePasswordAPIView(APIView):
 
     return Response({'message': 'Password changed successfully.'}, status=200)
 
+@extend_schema(
+  request=OpenApiRequest(
+    {
+      'type': 'object',
+      'properties': {
+        'current_password': {'type': 'string'},
+        'new_password': {'type': 'string'},
+      },
+      'required': ['current_password', 'new_password']
+    }
+  ),
+  responses={200:None, 400: 'Validation Error'}
+
+)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def change_current_password(request):

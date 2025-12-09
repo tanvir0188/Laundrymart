@@ -102,6 +102,9 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': True,
     # OTHER SETTINGS
+    'SWAGGER_UI_SETTINGS': {
+      "persistAuthorization": True
+    }
 }
 
 WSGI_APPLICATION = 'laundrymart.wsgi.application'
