@@ -21,57 +21,85 @@ class CreateUserSerializer(serializers.ModelSerializer):
 
   def validate(self, attrs):
     email = attrs.get('email')
-    phone_number = attrs.get('phone_number')
+    phone = attrs.get('phone_number')
     role = attrs.get('role')
     if role not in ['Customer', 'Vendor']:
       raise serializers.ValidationError({"role": "Role must be either 'Customer' or 'Vendor'."})
 
+    # Normalize input
+    email = email.strip().lower() if email else None
+    phone = phone.strip() if phone and phone.strip() else None
 
-    if not email and not phone_number:
-      raise serializers.ValidationError("Either email or phone number must be provided.")
+    attrs['email'] = email
+    attrs['phone_number'] = phone
 
-    # Validate email if present
+    if not email and not phone:
+      raise serializers.ValidationError(
+        "Either email or phone number must be provided."
+      )
+
+    # Email validation
     if email:
       try:
         validate_email(email)
       except ValidationError:
-        raise serializers.ValidationError({"email": "Enter a valid email address."})
+        raise serializers.ValidationError(
+          {"email": "Enter a valid email address."}
+        )
 
       if User.objects.filter(email=email).exists():
-        raise serializers.ValidationError({"email": "An account with this email already exists."})
+        raise serializers.ValidationError(
+          {"email": "An account with this email already exists."}
+        )
 
-      if User.objects.filter(phone_number=phone_number).exists():
-        raise serializers.ValidationError({"phone_number": "An account with this phone number already exists."})
+    # Phone validation
+    if phone:
+      if User.objects.filter(phone_number=phone).exists():
+        raise serializers.ValidationError(
+          {"phone_number": "An account with this phone number already exists."}
+        )
 
-    # Validate password
+    # Password validation
     password = attrs.get('password')
-    if password:
-      try:
-        validate_password(password)
-      except ValidationError as e:
-        raise serializers.ValidationError({"password": list(e.messages)})
+
+    if not password or not password.strip():
+      raise serializers.ValidationError(
+        {"password": "Password cannot be empty."}
+      )
+
+    try:
+      validate_password(password)
+    except ValidationError as e:
+      raise serializers.ValidationError(
+        {"password": list(e.messages)}
+      )
 
     return attrs
 
   def create(self, validated_data):
     email = validated_data.get('email')
-    phone_number = validated_data.get('phone_number')
-    role = validated_data.get('role')
-
+    phone = validated_data.get('phone_number')
+    role = validated_data.pop('role')
     password = validated_data.pop('password')
 
-    # generate OTP and expiry
-    otp = random.randint(1000, 9999)
+    # Generate OTP
+    otp = str(random.randint(1000, 9999))
     otp_expiry = timezone.now() + timedelta(minutes=1)
 
-    # Check if existing inactive user
-    existing_user = User.objects.filter(
-      Q(email=email) | Q(phone_number=phone_number)
-    ).first()
+    # Build safe query
+    query = Q()
+    if email:
+      query |= Q(email=email)
+    if phone:
+      query |= Q(phone_number=phone)
+
+    existing_user = User.objects.filter(query).first()
 
     if existing_user:
-      if existing_user.is_active:
-        raise serializers.ValidationError("User already exists and is active.")
+      if existing_user.is_active and existing_user.is_verified:
+        raise serializers.ValidationError(
+          "User already exists and is active."
+        )
 
       existing_user.otp = str(otp)
       existing_user.otp_expires = otp_expiry
@@ -82,7 +110,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     # Create a new user
     user = User(
       email=email,
-      phone_number=phone_number,
+      phone_number=phone,
       is_active=False,
       is_verified=False,
       otp=str(otp),

@@ -37,57 +37,66 @@ class RegisterView(APIView):
     email = request.data.get('email')
     phone_number = request.data.get('phone_number')
 
+    email = email.strip().lower() if email else None
+    phone_number = phone_number.strip() if phone_number else None
+    print(email, phone_number)
+
     if not email and not phone_number:
       return Response(
         {"error": "Either email or phone number must be provided."},
         status=status.HTTP_400_BAD_REQUEST
       )
 
+    # Build query dynamically (no null/blank traps)
+    query = Q()
+    if email:
+      query |= Q(email=email)
+    if phone_number:
+      query |= Q(phone_number=phone_number)
+
+    existing_user = User.objects.filter(query).first()
+    print(existing_user)
+
+    if existing_user:
+      if existing_user.is_active and existing_user.is_verified:
+        identifier = email or phone_number
+        return Response(
+          {"error": f"{identifier}: An account with this identifier already exists and is active."},
+          status=status.HTTP_400_BAD_REQUEST
+        )
     with transaction.atomic():
-      existing_user = None
-
-      # Check for existing record by email or phone
-      existing_user = User.objects.filter(
-        Q(email=email) | Q(phone_number=phone_number)
-      ).first()
-
-
-      # Handle existing user
+      # Safe to delete only after validation passes
       if existing_user:
-        if existing_user.is_active and existing_user.is_verified:
-          identifier = email or phone_number
-          return Response(
-            {"error": f"{identifier}: An account with this identifier already exists and is active."},
-            status=status.HTTP_400_BAD_REQUEST
-          )
-        # Delete inactive/unverified user
         existing_user.delete()
+
+    serializer = CreateUserSerializer(data=request.data)
+
+    if not serializer.is_valid():
+      errors = serializer.errors
+      field, messages = next(iter(errors.items()))
+      readable_field = field.replace('_', ' ').capitalize()
+      first_message = messages[0] if isinstance(messages, list) else messages
+      return Response(
+        {"error": f"{readable_field}: {first_message}"},
+        status=status.HTTP_400_BAD_REQUEST
+      )
 
     # Proceed with serialization and user creation
     serializer = CreateUserSerializer(data=request.data)
     if serializer.is_valid():
       user = serializer.save()
 
-      # Send OTP based on which identifier was used
-      if user.email:
-        send_otp_for_email_verification(user.email, user.otp)
-        message = "OTP sent to email."
-      elif user.phone_number:
-        send_otp_for_sms_verification(user.phone_number, user.otp)
-        message = "OTP sent to phone number."
-      else:
-        message = "OTP generated but no delivery method available."
+    # Send OTP
+    if user.email:
+      send_otp_for_email_verification(user.email, user.otp)
+      message = "OTP sent to email."
+    elif user.phone_number:
+      send_otp_for_sms_verification(user.phone_number, user.otp)
+      message = "OTP sent to phone number."
+    else:
+      message = "OTP generated but no delivery method available."
 
-      return Response({'message': message}, status=status.HTTP_201_CREATED)
-
-    # Handle validation errors gracefully
-    errors = serializer.errors
-    field, messages = next(iter(errors.items()))
-    readable_field = field.replace('_', ' ').capitalize()
-    first_message = messages[0] if isinstance(messages, list) else messages
-    error_message = f"{readable_field}: {first_message}"
-
-    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': message}, status=status.HTTP_201_CREATED)
 
 
 
