@@ -3,6 +3,6 @@ db.sqlite3
 *.pyc
 .idea/
 /access.txt
-/media/uploads/
+media/
 .env
 staticfiles/
