@@ -2,6 +2,8 @@ from rest_framework import serializers
 
 from accounts.models import Service, User
 from common_utils.distance_utils import calculate_distance_miles, get_best_location
+from customer.models import Review
+
 
 class ServiceSerializer(serializers.ModelSerializer):
   class Meta:
@@ -46,3 +48,8 @@ class VendorSerializer(serializers.ModelSerializer):
   #
   #   return calculate_distance_miles(user.lat, user.lng, obj.lat, obj.lng)
 
+class ReviewSerializer(serializers.ModelSerializer):
+  class Meta:
+    model=Review
+    fields = ['user', 'vendor', 'rating', 'created_at']
+    read_only_fields = ['user', 'vendor', 'created_at']
