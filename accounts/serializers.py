@@ -193,14 +193,15 @@ class LogoutSerializer(serializers.Serializer):
 class CustomerProfileSerializer(serializers.ModelSerializer):
   class Meta:
     model = User
-    fields = ['id', 'full_name', 'email', 'phone_number', 'image', 'location', 'lat', 'lng']
+    fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image', 'location', 'lat', 'lng']
+    read_only_fields = ('is_verified',)
 
 class VendorProfileSerializer(serializers.ModelSerializer):
   class Meta:
     model = User
-    fields = ['id', 'full_name', 'email', 'phone_number', 'image', 'location', 'lat', 'lng',
+    fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image', 'location', 'lat', 'lng',
               'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight',
-              'daily_capacity_limit',
+              'daily_capacity_limit', 'vendor_description',
               'turnaround_time_minimum_sunday', 'turnaround_time_maximum_sunday',
               'turnaround_time_minimum_monday', 'turnaround_time_maximum_monday',
               'turnaround_time_minimum_tuesday', 'turnaround_time_maximum_tuesday',
@@ -217,6 +218,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
               'operating_hours_start_friday', 'operating_hours_end_friday', 'is_closed_friday',
               'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
               ]
+    read_only_fields = ('is_verified',)
 
 class VendorSettingSerializer(serializers.ModelSerializer):
   class Meta:

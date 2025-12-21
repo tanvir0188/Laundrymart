@@ -76,6 +76,7 @@ class RegisterView(APIView):
       field, messages = next(iter(errors.items()))
       readable_field = field.replace('_', ' ').capitalize()
       first_message = messages[0] if isinstance(messages, list) else messages
+      print({"error": f"{readable_field}: {first_message}"})
       return Response(
         {"error": f"{readable_field}: {first_message}"},
         status=status.HTTP_400_BAD_REQUEST
