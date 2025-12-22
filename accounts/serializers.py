@@ -9,7 +9,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
+from .models import Service, User
 import random
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -196,12 +196,19 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
     fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image', 'location', 'lat', 'lng']
     read_only_fields = ('is_verified',)
 
+class ServiceSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = Service
+    fields = ['id', 'service_name', 'price_per_pound', 'image']
+
+
 class VendorProfileSerializer(serializers.ModelSerializer):
+  vendor_services = ServiceSerializer(many=True)
   class Meta:
     model = User
     fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image', 'location', 'lat', 'lng',
               'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight',
-              'daily_capacity_limit', 'vendor_description',
+              'daily_capacity_limit', 'vendor_description','vendor_services',
               'turnaround_time_minimum_sunday', 'turnaround_time_maximum_sunday',
               'turnaround_time_minimum_monday', 'turnaround_time_maximum_monday',
               'turnaround_time_minimum_tuesday', 'turnaround_time_maximum_tuesday',
@@ -219,6 +226,54 @@ class VendorProfileSerializer(serializers.ModelSerializer):
               'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
               ]
     read_only_fields = ('is_verified',)
+
+  def update(self, instance, validated_data):
+    request = self.context['request']
+
+    # Manually reconstruct services_data from form-data
+    services_data = []
+    i = 0
+    while True:
+      service_name_key = f'vendor_services[{i}][service_name]'
+      price_key = f'vendor_services[{i}][price_per_pound]'
+      image_key = f'vendor_services[{i}][image]'
+
+      if service_name_key not in request.data:
+        break
+
+      service_item = {
+        'service_name': request.data[service_name_key],
+        'price_per_pound': request.data[price_key],
+      }
+
+      if image_key in request.FILES:
+        service_item['image'] = request.FILES[image_key]
+
+      services_data.append(service_item)
+      i += 1
+
+    print("Reconstructed services_data:", services_data)
+
+    # IMPORTANT: Remove 'vendor_services' from validated_data to prevent setattr error
+    validated_data.pop('vendor_services', None)
+
+    # Now safely update the scalar fields on the vendor (User instance)
+    for attr, value in validated_data.items():
+      setattr(instance, attr, value)
+    instance.save()
+
+    # Only replace services if any were provided in the request
+    if services_data:
+      instance.vendor_services.all().delete()
+      for service in services_data:
+        Service.objects.create(
+          vendor=instance,
+          service_name=service['service_name'],
+          price_per_pound=service['price_per_pound'],
+          image=service.get('image')
+        )
+
+    return instance
 
 class VendorSettingSerializer(serializers.ModelSerializer):
   class Meta:

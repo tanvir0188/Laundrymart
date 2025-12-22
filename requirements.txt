@@ -16,3 +16,5 @@ rpds-py==0.26.0
 sqlparse==0.5.3
 tzdata==2025.2
 uritemplate==4.2.0
+
+faker
