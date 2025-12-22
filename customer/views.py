@@ -39,8 +39,35 @@ class VendorAPIView(ListAPIView):
 
   ordering = ['distance']  # default
 
+  @extend_schema(
+    parameters=[
+      OpenApiParameter(
+        name='lat',
+        description='Latitude to calculate distance',
+        required=False,
+        type=float
+      ),
+      OpenApiParameter(
+        name='lng',
+        description='Longitude to calculate distance',
+        required=False,
+        type=float
+
+      ),
+    ]
+  )
+  def get(self, request, *args, **kwargs):
+    return super().get(request, *args, **kwargs)
   def get_queryset(self):
     user = self.request.user
+
+    try:
+      lat = float(self.request.query_params.get('lat', user.lat))
+      lng = float(self.request.query_params.get('lng', user.lng))
+    except (TypeError, ValueError):
+      # fallback if user.lat or user.lng is None
+      lat = None
+      lng = None
 
     qs = User.objects.filter(
       is_staff=True,
@@ -52,9 +79,9 @@ class VendorAPIView(ListAPIView):
       )
     )
 
-    if user.lat and user.lng:
+    if lat is not None and lng is not None:
       qs = qs.annotate(
-        distance=calculate_distance_sql(user.lat, user.lng)
+        distance=calculate_distance_sql(lat, lng)
       )
 
     return qs
