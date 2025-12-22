@@ -55,12 +55,13 @@ class User(AbstractUser):
   email = models.EmailField(blank=True, null=True, unique=True, db_index=True)
   phone_number = models.CharField(blank=True, null=True, unique=True, max_length=30)
   location=models.TextField(blank=True, null=True)
-  lat = models.CharField(max_length=100, blank=True, null=True)
-  lng = models.CharField(max_length=100,blank=True, null=True)
+
+  lat = models.FloatField(blank=True, null=True)
+  lng = models.FloatField(blank=True, null=True)
 
   secondary_location=models.TextField(blank=True, null=True)
-  secondary_lat = models.CharField(max_length=100, blank=True, null=True)
-  secondary_lng = models.CharField(max_length=100,blank=True, null=True)
+  secondary_lat = models.FloatField(blank=True, null=True)
+  secondary_lng = models.FloatField(blank=True, null=True)
 
   is_active = models.BooleanField(default=False)
   otp = models.CharField(blank=True, null=True, max_length=4)
