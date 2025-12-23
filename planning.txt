@@ -1,29 +1,32 @@
  create quote
 data = {
-    "pickup_address": "{\"street_address\":[\"100 Maiden Ln\"],\"city\":\"New York\",\"state\":\"NY\",\"zip_code\":\"10023\",\"country\":\"US\"}",
-    "dropoff_address": "{\"street_address\":[\"30 Lincoln Center Plaza\"],\"city\":\"New York\",\"state\":\"NY\",\"zip_code\":\"10023\",\"country\":\"US\"}",
-    "pickup_latitude": 40.7066581,
-    "pickup_longitude": -74.0071868,
-    "dropoff_latitude": 38.9298375,
-    "dropoff_longitude": -77.0582303,
-    "pickup_phone_number": "+15555555555",
-    "dropoff_phone_number": "+15555555555",
-    "manifest_total_value": 1000,
-    "external_store_id": "my_store_123"
+ "pickup_address": "{\"street_address\": [\"20 W 34th St\", \"Floor 2\"],\"state\":\"NY\",\"city\":\"New York\",\"zip_code\":\"10001\",\"country\":\"US\"}",
+  "dropoff_address": "{\"street_address\": [\"285 Fulton St\", \"\"],\"state\":\"NY\",\"city\":\"New York\",\"zip_code\":\"10006\",\"country\":\"US\"}",
+"pickup_latitude": 40.74865,
+"pickup_longitude": -73.98530,
+"dropoff_latitude": 40.71274,
+"dropoff_longitude": -74.01338,
+  "pickup_ready_dt": "2024-12-12T14:00:00.000Z",
+  "pickup_deadline_dt": "2024-12-12T14:30:00.000Z",
+  "dropoff_ready_dt": "2024-12-12T14:30:00.000Z",
+  "dropoff_deadline_dt": "2024-12-12T16:00:00.000Z",
+  "pickup_phone_number": "+8801853958635",
+  "dropoff_phone_number": "+8801853958636",
+  "manifest_total_value": 1000
 }
 response=
 {
   "kind": "delivery_quote",
-  "id": "dqt_6gQ2dt31TjiOPfwux-NCXg",
-  "created": "2023-04-06T19:00:37.887Z",
-  "expires": "2023-04-06T19:15:37.887Z",
-  "fee": 600,
+  "id": "dqt_BiOsHEehR8W0zuTfL0_33A",
+  "created": "2025-12-23T06:07:57.938Z",
+  "expires": "2025-12-23T06:22:57.938Z",
+  "fee": 999,
   "currency": "usd",
   "currency_type": "USD",
-  "dropoff_eta": "2023-04-06T19:34:22.000Z",
-  "duration": 33,
-  "pickup_duration": 24,
-  "dropoff_deadline": "2023-04-06T20:09:20.000Z"
+  "dropoff_eta": "2025-12-23T06:54:17Z",
+  "duration": 46,
+  "pickup_duration": 8,
+  "dropoff_deadline": "2025-12-23T07:24:51Z"
 }
 
 create delivery
