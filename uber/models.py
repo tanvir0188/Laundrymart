@@ -46,18 +46,18 @@ class DeliveryQuote(models.Model):
     return f"Quote {self.quote_id} - ${self.fee if self.fee else 0} - Expires {self.expires}"
 
 class Delivery(models.Model):
-  delivery_id = models.CharField(max_length=255,unique=True,blank=True,null=True)
+  delivery_uid = models.CharField(max_length=255,unique=True,blank=True,null=True)
 
   quote = models.OneToOneField(DeliveryQuote,on_delete=models.CASCADE,null=True,blank=True)
 
+  batch_id=models.CharField(max_length=255,blank=True,null=True)
+
   customer = models.ForeignKey(
-    'User',
+    User,
     on_delete=models.CASCADE,
     related_name='deliveries'
   )
 
-  # Core request fields
-  quote_id = models.CharField(max_length=255, blank=True, null=True)
   idempotency_key = models.CharField(max_length=255, blank=True, null=True, unique=True)
 
   pickup_name = models.CharField(max_length=255, blank=True, null=True)
@@ -66,6 +66,7 @@ class Delivery(models.Model):
   pickup_latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
   pickup_longitude = models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
   pickup_notes = models.TextField(blank=True, null=True)
+  pickup_ready=models.DateTimeField(blank=True, null=True)
   pickup_business_name = models.CharField(max_length=255, blank=True, null=True)
 
   dropoff_name = models.CharField(max_length=255, blank=True, null=True)
@@ -76,13 +77,6 @@ class Delivery(models.Model):
   dropoff_notes = models.TextField(blank=True, null=True)
   dropoff_seller_notes = models.TextField(blank=True, null=True)
   dropoff_business_name = models.CharField(max_length=255, blank=True, null=True)
-
-  manifest_reference = models.CharField(max_length=255, blank=True, null=True)
-  manifest_total_value = models.DecimalField(
-    max_digits=12, decimal_places=2,
-    blank=True, null=True,
-    validators=[MinValueValidator(0)]
-  )
 
   external_store_id = models.CharField(max_length=100, blank=True, null=True)
   external_id = models.CharField(max_length=100, blank=True, null=True)
@@ -98,7 +92,11 @@ class Delivery(models.Model):
   dropoff_eta = models.DateTimeField(blank=True, null=True)
   dropoff_deadline = models.DateTimeField(blank=True, null=True)
 
+  completion_lat=models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+  completion_lng=models.DecimalField(max_digits=10, decimal_places=6, blank=True, null=True)
+
   courier_name = models.CharField(max_length=255, blank=True, null=True)
+  courier_tip=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
   courier_phone = models.CharField(max_length=30, blank=True, null=True)
   courier_vehicle_type = models.CharField(max_length=50, blank=True, null=True)
 
@@ -116,3 +114,12 @@ class Delivery(models.Model):
 
   def __str__(self):
     return f"Delivery {self.delivery_id or 'Pending'} - {self.external_id or self.pk}"
+
+class ManifestItem(models.Model):
+  delivery=models.ForeignKey(Delivery,on_delete=models.CASCADE)
+  name=models.CharField(max_length=255)
+  size=models.CharField(max_length=255)
+  dimensions=models.JSONField(blank=True, null=True)
+  weight=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  price=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+  vat_percentage=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
