@@ -1,9 +1,10 @@
 from rest_framework import serializers
 
-from uber.models import DeliveryQuote
+from uber.models import DELIVERABLE_ACTION_CHOICES, Delivery, DeliveryQuote, ManifestItem, SERVICE_TYPE_CHOICE
 
 
 class UberCreateQuoteSerializer(serializers.Serializer):
+  service_type=serializers.ChoiceField(required=True,choices=SERVICE_TYPE_CHOICE)
   pickup_address = serializers.CharField()
   dropoff_address = serializers.CharField()
 
@@ -11,11 +12,6 @@ class UberCreateQuoteSerializer(serializers.Serializer):
   pickup_longitude = serializers.FloatField(required=False)
   dropoff_latitude = serializers.FloatField(required=False)
   dropoff_longitude = serializers.FloatField(required=False)
-
-  pickup_ready_dt = serializers.DateTimeField(required=False)
-  pickup_deadline_dt = serializers.DateTimeField(required=False)
-  dropoff_ready_dt = serializers.DateTimeField(required=False)
-  dropoff_deadline_dt = serializers.DateTimeField(required=False)
 
   pickup_phone_number = serializers.RegexField(r'^\+[0-9]+$')
   dropoff_phone_number = serializers.RegexField(r'^\+[0-9]+$')
@@ -79,7 +75,77 @@ class UberCreateQuoteSerializer(serializers.Serializer):
 
     return payload
 
-class DeliveryQuoteSerializer(serializers.ModelSerializer):
+class DeliveryQuoteCreateSerializer(serializers.ModelSerializer):
   class Meta:
-    model=DeliveryQuote
-    fields=[]
+    model = DeliveryQuote
+    fields = ["service_type","quote_id","customer","pickup_address","dropoff_address","pickup_latitude",
+              "pickup_longitude","dropoff_latitude","dropoff_longitude","pickup_phone_number",
+              "dropoff_phone_number", "manifest_total_value","external_store_id","fee",
+              "currency","currency_type","dropoff_eta","duration","pickup_duration","dropoff_deadline",
+              "expires"]
+
+class UberCreateDeliveryPayloadSerializer(serializers.Serializer):
+  quote_id = serializers.CharField()
+
+  pickup_name = serializers.CharField()
+  pickup_phone_number = serializers.RegexField(r'^\+[0-9]+$')
+  pickup_notes = serializers.CharField(required=False, allow_blank=True)
+
+  dropoff_name = serializers.CharField()
+  dropoff_phone_number = serializers.RegexField(r'^\+[0-9]+$')
+  dropoff_notes = serializers.CharField(required=False, allow_blank=True)
+
+  deliverable_action = serializers.ChoiceField(choices=DELIVERABLE_ACTION_CHOICES,required=False)
+
+  pickup_ready_dt = serializers.DateTimeField(required=False)
+  pickup_deadline_dt = serializers.DateTimeField(required=False)
+  dropoff_ready_dt = serializers.DateTimeField(required=False)
+  dropoff_deadline_dt = serializers.DateTimeField(required=False)
+
+  tip = serializers.IntegerField(min_value=0, required=False)
+  idempotency_key = serializers.CharField()
+
+class ManifestItemSerializer(serializers.Serializer):
+  name = serializers.CharField()
+  quantity = serializers.IntegerField()
+  size = serializers.CharField(required=False)
+  dimensions = serializers.DictField(child=serializers.IntegerField())
+  price = serializers.IntegerField()
+  weight = serializers.IntegerField()
+  vat_percentage = serializers.IntegerField(required=False, default=0)
+
+  def validate_dimensions(self, value):
+    # Make absolutely sure everything is int
+    return {k: int(v) for k, v in value.items()}
+
+
+class CreateDeliverySerializer(serializers.Serializer):
+  pickup_name = serializers.CharField()
+  pickup_address = serializers.CharField()
+  pickup_phone_number = serializers.CharField()
+  dropoff_name = serializers.CharField()
+  dropoff_address = serializers.CharField()
+  dropoff_phone_number = serializers.CharField()
+  manifest_items = ManifestItemSerializer(many=True)
+  pickup_business_name = serializers.CharField(required=False, allow_blank=True)
+  pickup_latitude = serializers.FloatField(required=False)
+  pickup_longitude = serializers.FloatField(required=False)
+  pickup_notes = serializers.CharField(required=False, allow_blank=True)
+  dropoff_business_name = serializers.CharField(required=False, allow_blank=True)
+  dropoff_latitude = serializers.FloatField(required=False)
+  dropoff_longitude = serializers.FloatField(required=False)
+  dropoff_notes = serializers.CharField(required=False, allow_blank=True)
+  dropoff_seller_notes = serializers.CharField(required=False, allow_blank=True)
+  deliverable_action = serializers.CharField(required=False)
+  manifest_reference = serializers.CharField(required=False)
+  manifest_total_value = serializers.IntegerField()
+  quote_id = serializers.CharField()
+  tip = serializers.IntegerField(required=False)
+  idempotency_key = serializers.CharField(required=False)
+  external_store_id = serializers.CharField(required=False, allow_blank=True)
+  external_id = serializers.CharField(required=False, allow_blank=True)
+  pickup_ready_dt = serializers.DateTimeField(required=False)
+  pickup_deadline_dt = serializers.DateTimeField(required=False)
+  dropoff_ready_dt = serializers.DateTimeField(required=False)
+  dropoff_deadline_dt = serializers.DateTimeField(required=False)
+
