@@ -9,7 +9,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Service, User
+from .models import SecondaryLocation, Service, User
 import random
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -284,3 +284,9 @@ class CustomerSettingSerializer(serializers.ModelSerializer):
   class Meta:
     model = User
     fields = ['push_and_email_alerts', 'preference']
+
+class SecondaryLocationSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = SecondaryLocation
+    fields = ['user','lat', 'lng','location', 'created_at']
+    read_only_fields=['created_at', 'user']

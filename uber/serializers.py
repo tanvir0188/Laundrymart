@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from uber.models import DeliveryQuote
+
 
 class UberCreateQuoteSerializer(serializers.Serializer):
   pickup_address = serializers.CharField()
@@ -22,22 +24,34 @@ class UberCreateQuoteSerializer(serializers.Serializer):
 
   external_store_id = serializers.CharField(required=False, allow_blank=True)
 
-  def to_uber_payload(self):
+  def to_uber_payload(self, destination=None):
+
     data = self.validated_data
     import json  # Can be at top, but safe here too
 
     # Build structured address dict from free-text string
     def build_address_struct(address_str):
       return {
-        "street_address": [address_str.strip()],  # Array, supports multi-line
-        "city": "",  # TODO: Parse or add separate fields for accuracy
+        "street_address": [address_str.strip()],
+        "city": "",
         "state": "",
         "zip_code": "",
         "country": "US",  # Adjust if needed
       }
 
-    pickup_struct = build_address_struct(data["pickup_address"])
-    dropoff_struct = build_address_struct(data["dropoff_address"])
+    pickup_address = data["pickup_address"]
+    dropoff_address = data["dropoff_address"]
+
+    # Swap pickup/dropoff based on destination
+    if destination == "vendor":
+      # Leg 1: customer -> vendor
+      pickup_address, dropoff_address = pickup_address, dropoff_address
+    elif destination == "customer":
+      # Leg 2: vendor -> customer
+      pickup_address, dropoff_address = dropoff_address, pickup_address
+
+    pickup_struct = build_address_struct(pickup_address)
+    dropoff_struct = build_address_struct(dropoff_address)
 
     payload = {
       "pickup_address": json.dumps(pickup_struct),
@@ -64,3 +78,8 @@ class UberCreateQuoteSerializer(serializers.Serializer):
     #   payload["pickup_ready_time"] = data["pickup_ready_dt"].isoformat() + "Z"
 
     return payload
+
+class DeliveryQuoteSerializer(serializers.ModelSerializer):
+  class Meta:
+    model=DeliveryQuote
+    fields=[]

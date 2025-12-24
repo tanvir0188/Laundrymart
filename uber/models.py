@@ -1,7 +1,8 @@
+import requests
 from django.db import models
 from django.core.validators import MinValueValidator
 from accounts.models import User
-
+from uber.cache_access_token import UBER_BASE_URL, uber_headers
 
 # Create your models here.
 DELIVERY_CHOICE=[

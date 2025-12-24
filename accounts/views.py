@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.generics import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -16,12 +17,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from laundrymart.permissions import IsCustomer, IsStaff
 from message_utils.email_utils import send_otp_for_email_verification, send_otp_for_password, \
   send_otp_for_sms_password, send_otp_for_sms_verification
-from .models import User
+from .models import SecondaryLocation, User
 from .serializers import CreateUserSerializer, CustomerProfileSerializer, CustomerSettingSerializer, \
   ForgetPasswordSerializer, LogoutSerializer, \
   OTPSerializer, \
   ResendOTPSerializer, \
-  ChangePasswordSerializer, VendorProfileSerializer, VendorSettingSerializer
+  ChangePasswordSerializer, SecondaryLocationSerializer, VendorProfileSerializer, VendorSettingSerializer
 from drf_spectacular.utils import OpenApiExample, OpenApiRequest, extend_schema, OpenApiResponse, inline_serializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -534,5 +535,77 @@ class ManageCustomerSettingsAPIView(APIView):
     error_message = f"{readable_field}: {first_message}"
     return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
+class SecondaryLocationAPIView(APIView):
 
+  @extend_schema(
+    request=SecondaryLocationSerializer,
+    responses={200: SecondaryLocationSerializer, 400: 'Validation Error'}
+  )
 
+  def post(self, request):
+    user = request.user
+    serializer = SecondaryLocationSerializer(data=request.data)
+    if serializer.is_valid():
+      serializer.save(user=user)
+      return Response({'message':'Location added', 'data':serializer.data}, status=status.HTTP_200_OK)
+    errors = serializer.errors
+    field, messages = next(iter(errors.items()))
+    readable_field = field.replace('_', ' ').capitalize()
+    first_message = messages[0] if isinstance(messages, list) else messages
+    error_message = f"{readable_field}: {first_message}"
+    return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+  def get(self, request):
+    user = request.user
+    final_result = [{
+      'type': 'primary',
+      'location': user.location,
+      'lat': user.lat,
+      'lng': user.lng
+    }]
+    for loc in user.secondary_locations.all():
+      final_result.append({
+        'id': loc.id,
+        'type': 'secondary',
+        'location': loc.location,
+        'lat': loc.lat,
+        'lng': loc.lng
+      })
+    return Response(final_result)
+
+class SecondaryLocationModifyAPIView(APIView):
+
+  permission_classes=[IsCustomer]
+
+  @extend_schema(
+    request=SecondaryLocationSerializer,
+    responses={200: SecondaryLocationSerializer, 400: 'Validation Error', 404: 'Not Found'}
+  )
+  def patch(self, request, pk=None):
+    if pk is None:
+      # Update primary location
+      user = request.user
+      user_fields = ['location', 'lat', 'lng']
+      for field in user_fields:
+        if field in request.data:
+          setattr(user, field, request.data[field])
+      user.save()
+      return Response({
+        'type': 'primary',
+        'location': user.location,
+        'lat': user.lat,
+        'lng': user.lng
+      }, status=status.HTTP_200_OK)
+    else:
+      # Update secondary location
+      loc = get_object_or_404(SecondaryLocation, pk=pk, user=request.user)
+      serializer = SecondaryLocationSerializer(loc,data=request.data, partial=True)
+      if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+      return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+  def delete(self, request, pk=None):
+    location = get_object_or_404(SecondaryLocation, pk=pk, user=request.user)
+    location.delete()
+    return Response({'detail': 'Location deleted successfully'}, status=status.HTTP_200_OK)

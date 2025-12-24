@@ -9,6 +9,10 @@ class ServiceSerializer(serializers.ModelSerializer):
   class Meta:
     model = Service
     fields = '__all__'
+class VendorLocation(serializers.ModelSerializer):
+  class Meta:
+    model=User
+    fields = ['lat', 'lng', ]
 
 class VendorSerializer(serializers.ModelSerializer):
   distance=serializers.SerializerMethodField()

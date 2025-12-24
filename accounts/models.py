@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
@@ -71,6 +72,7 @@ class User(AbstractUser):
   is_tester=models.BooleanField(default=False)
 
   laundrymart_name=models.CharField(max_length=255, blank=True, null=True)
+  store_id=models.UUIDField(blank=True, null=True, unique=True)
 
   price_per_pound=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
   service_fee=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -143,6 +145,11 @@ class User(AbstractUser):
   REQUIRED_FIELDS = []
 
   objects = CustomUserManager()
+  @property
+  def store_uid(self):
+    if not self.store_id:
+      return None
+    return f"store_{self.store_id}"
 
   def average_rating(self):
 
@@ -245,7 +252,17 @@ class User(AbstractUser):
       raise ValidationError('Either email or phone number must be provided.')
 
   def save(self, *args, **kwargs):
-    self.full_clean()  # enforce `clean()` before save
+    # Validate first
+    self.full_clean()
+
+    # Auto-generate store_id ONLY for vendors
+    if self.is_staff and not self.is_superuser:
+      if not self.store_id:
+        self.store_id = uuid.uuid4()
+    else:
+      # Non-vendors must NOT have store_id
+      self.store_id = None
+
     super().save(*args, **kwargs)
 
   def __str__(self):
@@ -255,6 +272,21 @@ class User(AbstractUser):
     verbose_name = 'User'
     verbose_name_plural = 'Users'
 
+class SecondaryLocation(models.Model):
+  user=models.ForeignKey(User,on_delete=models.CASCADE, related_name='secondary_locations')
+  location=models.TextField(blank=True, null=True)
+  lat=models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+  lng=models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+
+  created_at=models.DateTimeField(auto_now_add=True)
+  updated=models.DateTimeField(auto_now=True)
+
+  def __str__(self):
+    return
+
+  class Meta:
+    verbose_name = 'Secondary Location'
+    verbose_name_plural = 'Secondary Locations'
 
 class Service(models.Model):
   vendor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vendor_services')
