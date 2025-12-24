@@ -20,7 +20,7 @@ class VendorSerializer(serializers.ModelSerializer):
 
   class Meta:
     model = User
-    fields = ['id', 'laundrymart_name','image', 'location','lat', 'lng', 'vendor_description', 'distance','price_per_pound',
+    fields = ['id', 'laundrymart_name','store_id','image', 'location','lat', 'lng', 'vendor_description', 'distance','price_per_pound',
 
               'average_rating','get_turnaround_time','is_open_now', 'closes_at', 'vendor_services',
 

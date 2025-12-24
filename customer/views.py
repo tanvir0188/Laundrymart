@@ -86,6 +86,62 @@ class VendorAPIView(ListAPIView):
 
     return qs
 
+class ChooseForCustomer(APIView):
+  """
+  API endpoint that automatically selects the cheapest LaundryMart (vendor)
+  within a 10-mile radius of the customer's saved location (user.lat / user.lng).
+
+  - Uses the customer's saved lat/lng directly (no query params needed)
+  - Uses your existing calculate_distance_sql function for distance calculation
+  - Prioritizes lowest price_per_pound among vendors with valid price and coordinates
+  - Returns 404 if no vendor found within 10 miles
+  """
+  permission_classes = [IsCustomer]
+
+  def get(self, request):
+    customer = request.user
+
+    # Use customer's saved coordinates directly
+    if not customer.lat or not customer.lng:
+      return Response(
+        {"detail": "Customer location (lat/lng) is not saved in profile."},
+        status=status.HTTP_400_BAD_REQUEST
+      )
+
+    try:
+      lat = float(customer.lat)
+      lng = float(customer.lng)
+    except (ValueError, TypeError):
+      return Response(
+        {"detail": "Invalid latitude or longitude in customer profile."},
+        status=status.HTTP_400_BAD_REQUEST
+      )
+
+    # Optimized single query using your existing calculate_distance_sql
+    candidates = (
+      User.objects.filter(
+        is_staff=True,
+        is_superuser=False,
+        price_per_pound__isnull=False,
+        lat__isnull=False,
+        lng__isnull=False,
+      )
+      .annotate(distance=calculate_distance_sql(lat, lng))
+      .filter(distance__lte=10)  # within 10 miles
+      .order_by('price_per_pound')  # lowest price first
+    )
+
+    if not candidates.exists():
+      return Response(
+        {"detail": "No LaundryMart found within 10 miles with available pricing."},
+        status=status.HTTP_404_NOT_FOUND
+      )
+
+    selected_vendor = candidates.first()
+    serializer = VendorSerializer(selected_vendor)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
 class ReviewAPIView(APIView):
   permission_classes = [IsCustomer]
 
