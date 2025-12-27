@@ -10,8 +10,14 @@ SERVICE_TYPE_CHOICE=[
   ('pickup', 'Pick up'),
   ('full_service', 'Full service')
 ]
+STATUS_CHOICES=[
+  ('pending', 'Pending'),
+  ('accepted', 'Accepted'),
+  ('rejected', 'Rejected'),
+]
 class DeliveryQuote(models.Model):
   service_type=models.CharField(max_length=50, blank=True, null=True, choices=SERVICE_TYPE_CHOICE)
+  status=models.CharField(max_length=50, blank=True, null=True, choices=STATUS_CHOICES, default='pending')
   quote_id = models.CharField(blank=True, null=True,unique=True, max_length=255)
   customer=models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_quotes')
   pickup_address=models.TextField(blank=True, null=True)
@@ -23,7 +29,8 @@ class DeliveryQuote(models.Model):
   pickup_phone_number=models.CharField(blank=True, null=True, max_length=50)
   dropoff_phone_number=models.CharField(blank=True, null=True, max_length=50)
   manifest_total_value=models.DecimalField(max_digits=12, decimal_places=2,blank=True, null=True, validators=[MinValueValidator(0)])
-  external_store_id=models.CharField(blank=True, null=True)
+  external_store_id=models.CharField(blank=True, null=True, db_index=True)
+
 
   fee=models.DecimalField(blank=True, null=True, max_digits=10, decimal_places=2)
   currency=models.CharField(max_length=20, blank=True, null=True)
@@ -57,7 +64,7 @@ class Delivery(models.Model):
   delivery_uid = models.CharField(max_length=255,unique=True,blank=True,null=True)
 
   quote = models.OneToOneField(DeliveryQuote,on_delete=models.CASCADE,null=True,blank=True)
-  quote_uid=models.CharField(max_length=100, blank=True, null=True)
+  quote_uid=models.CharField(max_length=100, blank=True, null=True, db_index=True)
   parent_delivery=models.ForeignKey('self', null=True, on_delete=models.CASCADE,related_name='child_deliveries')
 
   batch_id=models.CharField(max_length=255,blank=True,null=True)
@@ -88,7 +95,8 @@ class Delivery(models.Model):
   dropoff_seller_notes = models.TextField(blank=True, null=True)
   dropoff_business_name = models.CharField(max_length=255, blank=True, null=True)
 
-  external_store_id = models.CharField(max_length=100, blank=True, null=True)
+
+  external_store_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
   external_id = models.CharField(max_length=100, blank=True, null=True)
 
   deliverable_action = models.CharField(max_length=100, blank=True, null=True, choices=DELIVERABLE_ACTION_CHOICES, default='deliverable_action_meet_at_door')
@@ -109,6 +117,8 @@ class Delivery(models.Model):
   courier_tip=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
   courier_phone = models.CharField(max_length=30, blank=True, null=True)
   courier_vehicle_type = models.CharField(max_length=50, blank=True, null=True)
+
+  uber_raw_response = models.JSONField(blank=True, null=True)
 
   created_at_uber = models.DateTimeField(blank=True, null=True)
   updated_at_uber = models.DateTimeField(blank=True, null=True)

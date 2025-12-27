@@ -2,7 +2,7 @@ import os
 
 import requests
 from django.db import transaction
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from laundrymart import settings
-from laundrymart.permissions import IsCustomer
+from laundrymart.permissions import IsCustomer, IsStaff
 from uber.cache_access_token import UBER_BASE_URL, uber_headers
 from uber.models import Delivery, DeliveryQuote, ManifestItem
 from uber.serializers import CreateDeliverySerializer, UberCreateQuoteSerializer
@@ -118,6 +118,48 @@ class UberCreateQuoteAPIView(APIView):
 
     return Response(result)
 
+class RequestDeliveryAPIView(APIView):
+  permission_classes = [IsCustomer]
+  @extend_schema(
+    request=CreateDeliverySerializer,
+    responses={
+      200: OpenApiResponse(
+        description="Uber delivery quote created",
+        response={
+          "type": "object",
+          "properties": {
+
+          }
+        }
+      )
+    }
+  )
+  def post(self, request):
+    serializer = CreateDeliverySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    try:
+      # Save DeliveryQuote
+      delivery_quote = save_delivery_quote(
+        user=request.user,
+        service_type='drop_off',
+        serializer_data=data,
+        uber_data={
+          "id": data["quote_id"],
+          "fee": data.get("fee", 0),
+          "currency": "USD"
+        }
+      )
+    except Exception as e:
+      return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+      "quote_id": delivery_quote.quote_id,
+      "status": "quote_saved"
+    }, status=status.HTTP_201_CREATED)
+
+
 class ConfirmUberDeliveryAPIView(APIView):
   @extend_schema(
     request=CreateDeliverySerializer,
@@ -194,6 +236,10 @@ class ConfirmUberDeliveryAPIView(APIView):
           dropoff_eta=uber_delivery_data.get("dropoff_eta"),
           dropoff_deadline=uber_delivery_data.get("dropoff_deadline"),
           deliverable_action=data.get("deliverable_action"),
+          tracking_url=uber_delivery_data.get("tracking_url"),
+          dropoff_latitude=data.get("dropoff_latitude"),
+          dropoff_longitude=data.get("dropoff_longitude"),
+          uber_raw_response=uber_delivery_data
         )
 
         # Save manifest items
@@ -220,6 +266,6 @@ class ConfirmUberDeliveryAPIView(APIView):
       "delivery_id": delivery.delivery_uid,
       "quote_id": delivery_quote.quote_id,
       "status": "created",
-      "fee": delivery.fee,
-      "currency": delivery.currency
+      "uber_delivery_data": uber_delivery_data
+
     }, status=status.HTTP_201_CREATED)

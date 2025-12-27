@@ -56,7 +56,9 @@ INSTALLED_APPS = [
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
-
+CSRF_TRUSTED_ORIGINS = [
+  "https://*.ngrok-free.app",
+]
 SIMPLE_JWT ={
     "ACCESS_TOKEN_LIFETIME": timedelta(days=10),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=10),
@@ -74,6 +76,7 @@ AUTHENTICATION_BACKENDS = [
   'accounts.auth_backend.EmailOrPhoneBackend',
   'django.contrib.auth.backends.ModelBackend',
 ]
+
 
 
 ROOT_URLCONF = 'laundrymart.urls'
