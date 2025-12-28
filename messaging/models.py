@@ -1,6 +1,7 @@
 from django.db import models
 
 from accounts.models import User
+from payment.models import Order
 
 
 # Create your models here.
@@ -21,3 +22,24 @@ class Notification(models.Model):
 		return self.text
 	class Meta:
 		ordering = ['-created_at']
+
+class Room(models.Model):
+	order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="room")
+	name = models.CharField(max_length=255, null=True, blank=True)
+	participants = models.ManyToManyField(User, related_name='rooms')
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	def __str__(self):
+		return f'{self.name}-{self.id}'
+
+class Message(models.Model):
+	room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="messages")
+	text = models.TextField(blank=True, null=True, max_length=1000)
+	file = models.FileField(blank=True, null=True, upload_to="messages")
+	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
+	seen = models.BooleanField(default=False)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"Message({self.user} in {self.room})-{self.id}"
