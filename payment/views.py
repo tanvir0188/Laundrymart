@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -86,7 +87,7 @@ class ConfirmOrderAPIView(APIView):
 
 @csrf_exempt
 @transaction.atomic
-def stripe_webhook(request):
+def stripe_webhook_confirm_order(request):
     payload = request.body
     sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
     event = None
@@ -212,3 +213,174 @@ def stripe_webhook(request):
         # Optional: send confirmation email/SMS
 
     return HttpResponse(status=200)
+
+@api_view(['POST'])
+@permission_classes([IsCustomer])
+def charge_with_saved_method(request):
+  """Process payment using saved payment method"""
+  try:
+    data = request.data
+    amount = int(float(data.get('amount', 0)) * 100)  # Convert to cents
+    service_type = data.get('service_type')
+    payment_method_id = data.get('payment_method_id')
+
+    if amount <= 0 or not service_type:
+      return Response({
+        'success': False,
+        'error': 'Invalid amount or service type'
+      }, status=400)
+
+    # Get the customer ID
+    if not request.user.stripe_customer_id:
+      return Response({
+        'success': False,
+        'error': 'No customer profile found'
+      }, status=400)
+
+    customer_id = request.user.stripe_customer_id
+
+    # If no payment method specified, use default
+    if not payment_method_id:
+      if not payment_method_id:
+        return Response({
+          'success': False,
+          'error': 'No payment method specified'
+        }, status=400)
+
+    # Verify the payment method belongs to the customer
+    try:
+      pm = stripe.PaymentMethod.retrieve(payment_method_id)
+      if pm.customer != customer_id:
+        return Response({
+          'success': False,
+          'error': 'Payment method does not belong to this customer'
+        }, status=403)
+    except Exception:
+      return Response({
+        'success': False,
+        'error': 'Invalid payment method'
+      }, status=400)
+
+    # Create an order
+    order = Order.objects.create(
+      customer=request.user,
+      service_type=service_type,
+      total=amount / 100,  # Convert back to dollars for storage
+      payment_status='pending'
+    )
+
+    # Create and confirm payment intent
+    try:
+      payment_intent = stripe.PaymentIntent.create(
+        amount=amount,
+        currency='usd',
+        customer=customer_id,
+        payment_method=payment_method_id,
+        off_session=True,
+        confirm=True,
+        metadata={
+          'order_id': order.id,
+          'service_type': service_type
+        }
+      )
+
+      # Handle different payment states
+      if payment_intent.status == 'succeeded':
+        order.payment_status = 'paid'
+        order.payment_id = payment_intent.id
+        order.save()
+
+        return Response({
+          'success': True,
+          'requires_action': False,
+          'status': 'succeeded',
+          'order_id': order.id
+        })
+
+      elif payment_intent.status == 'requires_action':
+        order.payment_id = payment_intent.id
+        order.save()
+
+        return Response({
+          'success': True,
+          'requires_action': True,
+          'payment_intent_client_secret': payment_intent.client_secret,
+          'order_id': order.id
+        })
+
+      else:
+        order.payment_status = payment_intent.status
+        order.payment_id = payment_intent.id
+        order.save()
+
+        return Response({
+          'success': True,
+          'requires_action': False,
+          'status': payment_intent.status,
+          'order_id': order.id
+        })
+
+    except stripe.error.CardError as e:
+      # Card declined
+      order.payment_status = 'failed'
+      order.save()
+
+      return Response({
+        'success': False,
+        'error': e.error.message,
+        'order_id': order.id
+      }, status=400)
+
+  except Exception as e:
+    return Response({
+      'success': False,
+      'error': str(e)
+    }, status=400)
+
+
+@api_view(['GET'])
+@permission_classes([IsCustomer])
+def list_cards_from_stripe(request):
+  """Fetch saved payment methods directly from Stripe"""
+  try:
+    # Get or create Stripe customer ID
+    if not request.user.stripe_customer_id:
+      customer_id = create_stripe_customer(request.user)
+      if not customer_id:
+        return Response({
+          'success': False,
+          'error': 'Failed to create customer'
+        }, status=400)
+    else:
+      customer_id = request.user.stripe_customer_id
+
+    # Fetch payment methods directly from Stripe
+    payment_methods = stripe.PaymentMethod.list(
+      customer=customer_id,
+      type="card"
+    )
+
+    # Format card data for the frontend
+    cards = []
+    for pm in payment_methods.data:
+      cards.append({
+        'id': pm.id,
+        'brand': pm.card.brand,
+        'last4': pm.card.last4,
+        'exp_month': pm.card.exp_month,
+        'exp_year': pm.card.exp_year,
+        # Stripe doesn't track which card is default in their API
+        # You would need to store this separately if needed
+      })
+
+    return Response({
+      'success': True,
+      'has_cards': len(cards) > 0,
+      'cards': cards
+    })
+
+  except Exception as e:
+    return Response({
+      'success': False,
+      'error': str(e)
+    }, status=400)

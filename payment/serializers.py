@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from payment.models import SavedPaymentMethod
 from uber.models import SERVICE_TYPE_CHOICE
 from uber.serializers import ManifestItemSerializer
 
@@ -54,3 +55,9 @@ class ConfirmOrderSerializer(serializers.Serializer):
         payload[field] = data[field]
 
     return payload
+
+class SavedPaymentMethodSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = SavedPaymentMethod
+    fields = ["id", "user", "stripe_payment_method_id", "card_brand", "last4", "exp_month",
+              "exp_year", "is_default", "created_at"]

@@ -165,3 +165,32 @@ class ReviewAPIView(APIView):
       return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
       return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# @api_view(['GET'])
+# @permission_classes([IsAuthenticated])
+# def list_saved_cards(request):
+#   """List all saved payment methods for this user"""
+#   try:
+#     payment_methods = SavedPaymentMethod.objects.filter(user=request.user)
+#
+#     cards = [{
+#       'id': pm.stripe_payment_method_id,
+#       'brand': pm.card_brand,
+#       'last4': pm.last4,
+#       'exp_month': pm.exp_month,
+#       'exp_year': pm.exp_year,
+#       'is_default': pm.is_default
+#     } for pm in payment_methods]
+#
+#     return Response({
+#       'success': True,
+#       'has_cards': len(cards) > 0,
+#       'cards': cards
+#     })
+#
+#   except Exception as e:
+#     return Response({
+#       'success': False,
+#       'error': str(e)
+#     }, status=400)

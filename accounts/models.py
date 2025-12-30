@@ -136,6 +136,7 @@ class User(AbstractUser):
 
   preference = models.CharField(max_length=50, blank=True, null=True, choices=PREFERENCE_CHOICES, default='Auto-assign another LaundryMart (fastest)')
   stripe_customer_id = models.CharField(max_length=200, blank=True, null=True)
+  stripe_default_payment_method_id = models.CharField(max_length=200, blank=True, null=True)
 
   created_at=models.DateTimeField(auto_now_add=True)
   updated_at=models.DateTimeField(auto_now=True)
