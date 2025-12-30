@@ -1,7 +1,8 @@
 from django.urls import path
 
 from accounts.views import SecondaryLocationAPIView, SecondaryLocationModifyAPIView
-from uber.views import ConfirmUberDeliveryAPIView, UberCreateQuoteAPIView
+from payment.views import ConfirmOrderAPIView
+from uber.views import UberCreateQuoteAPIView
 from . import views
 from .views import ChooseForCustomer
 
@@ -13,5 +14,5 @@ urlpatterns = [
   path('location/<int:pk>', SecondaryLocationModifyAPIView.as_view(), name='location'),
   path('location', SecondaryLocationModifyAPIView.as_view(), name='location'),
   path('choose-for-customer', ChooseForCustomer.as_view(), name='choose-for-customer'),
-  path('confirm-delivery', ConfirmUberDeliveryAPIView.as_view(), name='confirm-delivery'),
+  path('confirm-order', ConfirmOrderAPIView.as_view(), name='confirm-order'),
 ]

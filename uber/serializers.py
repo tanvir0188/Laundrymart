@@ -105,18 +105,27 @@ class UberCreateDeliveryPayloadSerializer(serializers.Serializer):
   tip = serializers.IntegerField(min_value=0, required=False)
   idempotency_key = serializers.CharField()
 
+class DimensionsSerializer(serializers.Serializer):
+  length = serializers.IntegerField()
+  height = serializers.IntegerField()
+  depth = serializers.IntegerField()
+
+  def validate(self, attrs):
+    for key, value in attrs.items():
+      if value <= 0:
+        raise serializers.ValidationError(
+          f"{key} must be a positive integer"
+        )
+    return attrs
+
 class ManifestItemSerializer(serializers.Serializer):
   name = serializers.CharField()
   quantity = serializers.IntegerField()
   size = serializers.CharField(required=False)
-  dimensions = serializers.DictField(child=serializers.IntegerField())
+  dimensions = DimensionsSerializer()
   price = serializers.IntegerField()
   weight = serializers.IntegerField()
   vat_percentage = serializers.IntegerField(required=False, default=0)
-
-  def validate_dimensions(self, value):
-    # Make absolutely sure everything is int
-    return {k: int(v) for k, v in value.items()}
 
 
 class CreateDeliverySerializer(serializers.Serializer):

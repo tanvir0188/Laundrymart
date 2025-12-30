@@ -1,7 +1,8 @@
 import requests
 
+from laundrymart.settings import UBER_CUSTOMER_ID
 from uber.cache_access_token import UBER_BASE_URL, uber_headers
-from uber.models import Delivery, DeliveryQuote
+from uber.models import Delivery, DeliveryQuote, ManifestItem
 from uber.serializers import DeliveryQuoteCreateSerializer
 
 
@@ -68,3 +69,74 @@ def save_delivery_quote(*, user, service_type, serializer_data, uber_data):
     dropoff_deadline=uber_data.get("dropoff_deadline"),
     expires=uber_data.get("expires"),
   )
+
+def create_uber_delivery( payload, headers):
+    """
+    Low-level call to Uber Direct /deliveries endpoint.
+    Returns the parsed JSON response.
+    """
+    resp = requests.post(
+      f"{UBER_BASE_URL}/customers/{UBER_CUSTOMER_ID}/deliveries",
+      headers=headers,
+      json=payload,
+      timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_and_save_delivery(
+    *,
+    user,
+    validated_data,  # from ConfirmOrderSerializer.validated_data
+    payload,
+    is_return_leg=False,
+):
+  """
+  Creates Uber delivery and saves it + manifest items to DB.
+  Reusable for both pickup and full_service legs.
+  """
+  customer_id = UBER_CUSTOMER_ID
+  headers = uber_headers()  # your existing function
+
+  uber_data = create_uber_delivery(payload, headers)
+
+  # Determine which lat/lng to use for dropoff (important for return leg)
+  dropoff_lat = (
+    validated_data["pickup_latitude"]
+    if is_return_leg
+    else validated_data["dropoff_latitude"]
+  )
+  dropoff_lng = (
+    validated_data["pickup_longitude"]
+    if is_return_leg
+    else validated_data["dropoff_longitude"]
+  )
+
+  delivery = Delivery.objects.create(
+    customer=user,
+    delivery_uid=uber_data["id"],
+    pickup_name=payload.get("pickup_name"),
+    pickup_address=payload["pickup_address"],
+    pickup_phone_number=payload["pickup_phone_number"],
+    dropoff_name=payload.get("dropoff_name"),
+    dropoff_address=payload["dropoff_address"],
+    dropoff_phone_number=payload["dropoff_phone_number"],
+    external_id=validated_data.get("external_id"),
+    external_store_id=validated_data.get("external_store_id"),
+    fee=uber_data.get("fee"),
+    currency=uber_data.get("currency", "USD"),
+    dropoff_eta=uber_data.get("dropoff_eta"),
+    dropoff_deadline=uber_data.get("dropoff_deadline"),
+    deliverable_action=validated_data.get("deliverable_action"),
+    tracking_url=uber_data.get("tracking_url"),
+    dropoff_latitude=dropoff_lat,
+    dropoff_longitude=dropoff_lng,
+    uber_raw_response=uber_data,
+  )
+
+  # Save manifest items using already-validated data
+  for item in validated_data.get("manifest_items", []):
+    ManifestItem.objects.create(delivery=delivery, **item)
+
+  return delivery

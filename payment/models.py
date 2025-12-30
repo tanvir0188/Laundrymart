@@ -3,12 +3,38 @@ from django.db import models
 # Create your models here.
 # orders/models.py
 from django.db import models
-from django.conf import settings
+from laundrymart import settings
 from django.core.validators import MinValueValidator
 import uuid
 
 from accounts.models import User
 
+
+class SavedPaymentMethod(models.Model):
+  """Store references to user's payment methods in Stripe"""
+  user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_methods')
+  stripe_payment_method_id = models.CharField(max_length=100)
+
+  # Store display info only (non-sensitive)
+  last4 = models.CharField(max_length=4)
+  card_brand = models.CharField(max_length=20)  # visa, mastercard, etc.
+  exp_month = models.IntegerField()
+  exp_year = models.IntegerField()
+
+  # Optional: store a recognizable name for the card
+  nickname = models.CharField(max_length=50, blank=True, null=True)
+
+  # Is this the default payment method?
+  is_default = models.BooleanField(default=False)
+
+  # When the card was added
+  created_at = models.DateTimeField(auto_now_add=True)
+
+  class Meta:
+    ordering = ['-is_default', '-created_at']
+
+  def __str__(self):
+    return f"{self.card_brand} **** {self.last4}"
 
 class Order(models.Model):
   """
@@ -19,13 +45,19 @@ class Order(models.Model):
   service_provider=models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_orders', blank=True, null=True)
 
   # Addresses (stored as JSON strings to match Uber format – you can change later if needed)
-  pickup_address = models.JSONField(blank=True, null=True)
-  dropoff_address = models.JSONField(blank=True, null=True)
+  pickup_address = models.TextField(blank=True, null=True)
+  dropoff_address = models.TextField(blank=True, null=True)
+
+  pickup_latitude=models.FloatField(blank=True, null=True)
+  pickup_longitude=models.FloatField(blank=True, null=True)
+  dropoff_latitude=models.FloatField(blank=True, null=True)
+  dropoff_longitude=models.FloatField(blank=True, null=True)
 
   # Uber tracking
   uber_pickup_quote_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
   uber_pickup_delivery_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
   uber_return_quote_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+  uber_parent_delivery_id= models.CharField(max_length=100, blank=True, null=True, db_index=True)
   uber_return_delivery_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
 
   # Stripe

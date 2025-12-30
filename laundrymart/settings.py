@@ -26,6 +26,9 @@ SECRET_KEY = 'django-insecure-_fxcmxqehq047c^6^mbu$e$3n#skx*$+pc761^wzj6npqlw=v9
 UBER_CUSTOMER_ID=os.getenv('UBER_CUSTOMER_ID')
 UBER_CLIENT_ID=os.getenv('UBER_CLIENT_ID')
 UBER_CLIENT_SECRET=os.getenv('UBER_CLIENT_SECRET')
+STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY=os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
