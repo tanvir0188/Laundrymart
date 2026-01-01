@@ -46,6 +46,8 @@ class MessageAPIView(APIView):
       return Response({"detail": "Not allowed in this room."}, status=403)
 
     messages = Message.objects.filter(room=room).order_by("created_at")
+    if not messages.exists():
+      return Response({"messages": [],"message": "No message yet"},status=200)
 
     # Find unseen messages sent by others
     unseen_messages = messages.filter(seen=False).exclude(user=request.user)

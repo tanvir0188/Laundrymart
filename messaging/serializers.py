@@ -35,6 +35,17 @@ class RoomSerializer(serializers.ModelSerializer):
 		participants = obj.participants.all()
 		other = participants.exclude(id=user.id).first()
 		return other.full_name if other else None
+	def get_other_user_image(self, obj):
+		request = self.context.get('request')
+		if not request or not hasattr(request, "user"):
+			return None
+
+		user = request.user
+		participants = obj.participants.all()
+		other = participants.exclude(id=user.id).first()
+		if other and other.image:
+			return request.build_absolute_uri(other.image.url)
+		return None
 
 	def get_last_message(self, obj):
 		last_message = obj.messages.order_by('-created_at').first()  # get the latest message

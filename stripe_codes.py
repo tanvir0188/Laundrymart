@@ -9,6 +9,7 @@ Here's how to implement this flow:
 
 
 """
+from payment.utils import create_stripe_customer
 
 
 @api_view(['POST'])
