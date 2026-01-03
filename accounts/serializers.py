@@ -206,8 +206,8 @@ class VendorProfileSerializer(serializers.ModelSerializer):
   vendor_services = ServiceSerializer(many=True)
   class Meta:
     model = User
-    fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image', 'location', 'lat', 'lng',
-              'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight',
+    fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image','location', 'lat', 'lng',
+              'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight','external_store_id',
               'daily_capacity_limit', 'vendor_description','vendor_services',
               'turnaround_time_minimum_sunday', 'turnaround_time_maximum_sunday',
               'turnaround_time_minimum_monday', 'turnaround_time_maximum_monday',
@@ -226,7 +226,6 @@ class VendorProfileSerializer(serializers.ModelSerializer):
               'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
               ]
     read_only_fields = ('is_verified',)
-
   def update(self, instance, validated_data):
     request = self.context['request']
 

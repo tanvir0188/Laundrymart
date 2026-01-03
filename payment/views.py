@@ -5,6 +5,7 @@ import requests
 import stripe
 from django.db import transaction
 from django.http import HttpResponse
+from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema
@@ -23,6 +24,12 @@ from uber.utils import create_and_save_delivery, save_delivery_quote
 
 
 # Create your views here.
+def stripe_success(request):
+  return render(request, "payments/stripe_success.html")
+
+def stripe_cancel(request):
+  return render(request, "payments/stripe_cancel.html")
+
 class ConfirmOrderAPIView(APIView):
   permission_classes = [IsCustomer]
   @extend_schema(
@@ -34,185 +41,256 @@ class ConfirmOrderAPIView(APIView):
     data = serializer.validated_data
     service_type = data["service_type"]
 
-    # Ensure Stripe customer exists
-    stripe_customer_id = create_stripe_customer(request.user)
-    if not stripe_customer_id:
+    # Ensure Stripe customer exists (create if needed)
+    stripe_customer_result = create_stripe_customer(request.user)
+    if not stripe_customer_result:
       return Response({"error": "Failed to initialize payment customer"}, status=500)
 
-    # Create Checkout Session in setup mode
-    protocol = "https" if request.is_secure() else "http"
-    success_url = f"{protocol}://{request.get_host()}{reverse('stripe-setup-success')}?session_id={{CHECKOUT_SESSION_ID}}"
-    cancel_url = f"{protocol}://{request.get_host()}{reverse('stripe-setup-cancel')}"
+    stripe_customer_id = stripe_customer_result['customer_id']
 
+    # Check if user already has saved cards
     try:
-      session = stripe.checkout.Session.create(
-        mode="setup",
+      payment_methods = stripe.PaymentMethod.list(
         customer=stripe_customer_id,
-        payment_method_types=["card"],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
-          "user_id": str(request.user.id),
-          "service_type": service_type,
-          "quote_id": data["quote_id"],
-          "return_quote_id": data.get("return_quote_id", ""),
-          # Store all needed data as JSON string if too large
-          "order_payload": json.dumps({
-            "pickup_address": data["pickup_address"],
-            "dropoff_address": data["dropoff_address"],
-            "pickup_latitude": data["pickup_latitude"],
-            "pickup_longitude": data["pickup_longitude"],
-            "dropoff_latitude": data["dropoff_latitude"],
-            "dropoff_longitude": data["dropoff_longitude"],
-            "pickup_phone_number": data["pickup_phone_number"],
-            "dropoff_phone_number": data["dropoff_phone_number"],
-            "pickup_name": data.get("pickup_name"),
-            "dropoff_name": data.get("dropoff_name"),
-            "manifest_items": data.get("manifest_items", []),
-            "manifest_total_value": data.get("manifest_total_value"),
-            "external_store_id": data.get("external_store_id"),
-            "external_id": data.get("external_id"),
-            "deliverable_action": data.get("deliverable_action"),
-          })
-        },
+        type="card",
       )
+      has_saved_cards = len(payment_methods.data) > 0
     except Exception as e:
-      return Response({"error": f"Stripe setup failed: {str(e)}"}, status=500)
+      return Response({"error": f"Failed to check saved cards: {str(e)}"}, status=500)
 
-    return Response({
-      "message": "Redirect to Stripe to save your card.",
-      "checkout_url": session.url,
-      "checkout_session_id": session.id,
-    }, status=status.HTTP_200_OK)
+    if has_saved_cards:
+      # User has saved cards → provide list and a SetupIntent client_secret for in-app card addition (optional)
+      cards = []
+      for pm in payment_methods.data:
+        cards.append({
+          'id': pm.id,
+          'brand': pm.card.brand.capitalize(),
+          'last4': pm.card.last4,
+          'exp_month': pm.card.exp_month,
+          'exp_year': pm.card.exp_year,
+        })
+
+      # Create a reusable SetupIntent for potential new card addition without redirecting to hosted page
+      try:
+        setup_intent = stripe.SetupIntent.create(
+          customer=stripe_customer_id,
+          payment_method_types=["card"],
+          usage="off_session",  # since we will charge later
+        )
+      except Exception as e:
+        return Response({"error": f"Failed to create SetupIntent: {str(e)}"}, status=500)
+
+      return Response({
+        "requires_card_save": False,
+        "has_saved_cards": True,
+        "cards": cards,
+        "setup_intent_client_secret": setup_intent.client_secret,  # frontend can use this to add new card if user wants
+        "message": "You have saved cards. Proceed to payment confirmation with selected card."
+      }, status=status.HTTP_200_OK)
+
+    else:
+      # No saved cards → redirect to Stripe Checkout (setup mode) to save the first card
+      protocol = "https" if request.is_secure() else "http"
+
+      success_url = (
+        f"{protocol}://{request.get_host()}"
+        f"{reverse('stripe_success')}?session_id={{CHECKOUT_SESSION_ID}}"
+      )
+
+      cancel_url = (
+        f"{protocol}://{request.get_host()}"
+        f"{reverse('stripe_cancel')}"
+      )
+
+      try:
+        session = stripe.checkout.Session.create(
+          mode="setup",
+          customer=stripe_customer_id,
+          payment_method_types=["card"],
+          success_url=success_url,
+          cancel_url=cancel_url,
+          metadata={
+            "user_id": str(request.user.id),
+            "service_type": service_type,
+            "quote_id": data["quote_id"],
+            "return_quote_id": data.get("return_quote_id", ""),
+            "order_payload": json.dumps({
+              "pickup_address": data["pickup_address"],
+              "dropoff_address": data["dropoff_address"],
+              "pickup_latitude": data["pickup_latitude"],
+              "pickup_longitude": data["pickup_longitude"],
+              "dropoff_latitude": data["dropoff_latitude"],
+              "dropoff_longitude": data["dropoff_longitude"],
+              "pickup_phone_number": data["pickup_phone_number"],
+              "dropoff_phone_number": data["dropoff_phone_number"],
+              "pickup_name": data.get("pickup_name"),
+              "dropoff_name": data.get("dropoff_name"),
+              "manifest_items": data.get("manifest_items", []),
+              "manifest_total_value": data.get("manifest_total_value"),
+              "external_store_id": data.get("external_store_id"),
+              "external_id": data.get("external_id"),
+              "deliverable_action": data.get("deliverable_action"),
+            })
+          },
+        )
+      except Exception as e:
+        return Response({"error": f"Stripe setup failed: {str(e)}"}, status=500)
+
+      return Response({
+        "requires_card_save": True,
+        "message": "Redirect to Stripe to save your card.",
+        "checkout_url": session.url,
+        "checkout_session_id": session.id,
+      }, status=status.HTTP_200_OK)
+
 
 @csrf_exempt
 @transaction.atomic
 def stripe_webhook_confirm_order(request):
-    payload = request.body
-    sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
-    event = None
+  payload = request.body
+  sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
+
+  try:
+    event = stripe.Webhook.construct_event(
+      payload, sig_header, STRIPE_WEBHOOK_SECRET
+    )
+  except ValueError:
+    return HttpResponse(status=400)
+  except stripe.error.SignatureVerificationError:
+    return HttpResponse(status=400)
+
+  # Only handle setup sessions (first-time card save via Checkout)
+  if event["type"] == "checkout.session.completed":
+    session = event["data"]["object"]
+
+    # Ensure this is a setup session with no payment required
+    if session.mode != "setup" or session.payment_status != "no_payment_required":
+      return HttpResponse(status=200)
+
+    # Extract metadata
+    user_id = session.metadata.get("user_id")
+    service_type = session.metadata.get("service_type")
+    quote_id = session.metadata.get("quote_id")
+    return_quote_id = session.metadata.get("return_quote_id", "")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, STRIPE_WEBHOOK_SECRET
-        )
-    except ValueError:
-        return HttpResponse(status=400)
-    except stripe.error.SignatureVerificationError:
-        return HttpResponse(status=400)
+      order_payload = json.loads(session.metadata["order_payload"])
+    except (KeyError, json.JSONDecodeError):
+      return HttpResponse(status=400)  # Malformed metadata
 
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
+    try:
+      user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+      return HttpResponse(status=404)
 
-        if session.mode != "setup" or session.payment_status != "no_payment_required":
-            return HttpResponse(status=200)
+    # Retrieve the saved PaymentMethod from the SetupIntent linked to this session
+    # Stripe automatically attaches it to the customer on successful setup
+    try:
+      setup_intent = stripe.SetupIntent.retrieve(session.setup_intent)
+      payment_method_id = setup_intent.payment_method
+    except Exception as e:
+      # Log this — critical error
+      print(f"Failed to retrieve SetupIntent or PaymentMethod: {e}")
+      return HttpResponse(status=500)
 
-        user_id = session.metadata["user_id"]
-        service_type = session.metadata["service_type"]
-        order_payload = json.loads(session.metadata["order_payload"])
+    # Create the Order
+    order = Order.objects.create(
+      uuid=uuid4(),
+      user=user,
+      pickup_address=order_payload["pickup_address"],
+      dropoff_address=order_payload["dropoff_address"],
+      stripe_customer_id=session.customer,
+      stripe_payment_method_id=payment_method_id,  # Optional: save the PM used/added
+      status="card_saved",
+    )
 
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return HttpResponse(status=200)
+    # Proceed to create Uber delivery if service requires it
+    if service_type in ["pickup", "full_service"]:
+      base_payload = {
+        "quote_id": quote_id,
+        "pickup_address": order_payload["pickup_address"],
+        "dropoff_address": order_payload["dropoff_address"],
+        "pickup_phone_number": order_payload["pickup_phone_number"],
+        "dropoff_phone_number": order_payload["dropoff_phone_number"],
+        "external_store_id": order_payload.get("external_store_id"),
+        "manifest_total_value": order_payload.get("manifest_total_value"),
+        "manifest_items": order_payload.get("manifest_items", []),
+        "pickup_latitude": order_payload["pickup_latitude"],
+        "pickup_longitude": order_payload["pickup_longitude"],
+        "dropoff_latitude": order_payload["dropoff_latitude"],
+        "dropoff_longitude": order_payload["dropoff_longitude"],
+        "idempotency_key": str(order.uuid),  # Recommended by Uber
+      }
 
-        # Create Order now that card is saved
-        order = Order.objects.create(
-            uuid=uuid4(),
+      try:
+        if service_type == "pickup":
+          base_payload.update({
+            "pickup_name": order_payload.get("pickup_name", "LaundryMart"),
+            "dropoff_name": user.full_name or "Customer",
+            "deliverable_action": order_payload.get("deliverable_action"),
+          })
+          delivery = create_and_save_delivery(
             user=user,
-            pickup_address=order_payload["pickup_address"],
-            dropoff_address=order_payload["dropoff_address"],
-            stripe_customer_id=session.customer,
-            status="card_saved",  # or "awaiting_delivery"
-        )
+            validated_data=order_payload,
+            payload=base_payload,
+            is_return_leg=False,
+          )
 
-        # Create Uber delivery only if needed
-        if service_type in ["pickup", "full_service"]:
-            base_payload = {
-                "quote_id": session.metadata["quote_id"],
-                "pickup_address": order_payload["pickup_address"],
-                "dropoff_address": order_payload["dropoff_address"],
-                "pickup_phone_number": order_payload["pickup_phone_number"],
-                "dropoff_phone_number": order_payload["dropoff_phone_number"],
-                "external_store_id": order_payload.get("external_store_id"),
-                "manifest_total_value": order_payload.get("manifest_total_value"),
-                "manifest_items": order_payload.get("manifest_items", []),
-                "pickup_latitude": order_payload["pickup_latitude"],
-                "pickup_longitude": order_payload["pickup_longitude"],
-                "dropoff_latitude": order_payload["dropoff_latitude"],
-                "dropoff_longitude": order_payload["dropoff_longitude"],
-            }
+          # Save updated quote info from actual delivery response
+          save_delivery_quote(
+            user=user,
+            service_type=service_type,
+            serializer_data=order_payload,
+            uber_data={
+              "id": quote_id,
+              "fee": delivery.fee,
+              "currency": delivery.currency or "USD",
+              "currency_type": delivery.currency_type or "USD",
+              "dropoff_eta": delivery.dropoff_eta,
+              "dropoff_deadline": delivery.dropoff_deadline,
+            },
+          )
 
-            try:
-                if service_type == "pickup":
-                    base_payload.update({
-                        "pickup_name": order_payload.get("pickup_name", "LaundryMart"),
-                        "dropoff_name": user.full_name or "Customer",
-                    })
-                    delivery = create_and_save_delivery(
-                        user=user,
-                        validated_data=order_payload,
-                        payload=base_payload,
-                        is_return_leg=False,
-                    )
-                    save_delivery_quote(
-                        user=user,
-                        service_type=service_type,
-                        serializer_data=order_payload,
-                        uber_data={
-                          "id": session.metadata["quote_id"],
-                          "fee": delivery.fee,
-                          "currency": delivery.currency or "USD",
-                          "currency_type": delivery.currency or "USD",
-                          # Uber returns currency_type in quote, but delivery may not have it
-                          "dropoff_eta": delivery.dropoff_eta,
-                          "duration": None,  # not available after delivery creation
-                          "pickup_duration": None,
-                          "dropoff_deadline": delivery.dropoff_deadline,
-                          "expires": None,  # quote already used, no longer relevant
-                        },
-                    )
+        elif service_type == "full_service":
+          base_payload.update({
+            "pickup_name": user.full_name or "Customer",
+            "dropoff_name": order_payload.get("dropoff_name", "LaundryMart"),
+            "deliverable_action": order_payload.get("deliverable_action"),
+          })
+          delivery = create_and_save_delivery(
+            user=user,
+            validated_data=order_payload,
+            payload=base_payload,
+            is_return_leg=False,
+          )
 
-                elif service_type == "full_service":
-                    base_payload.update({
-                        "pickup_name": user.full_name or "Customer",
-                        "dropoff_name": order_payload.get("dropoff_name", "LaundryMart"),
-                    })
-                    delivery = create_and_save_delivery(
-                        user=user,
-                        validated_data=order_payload,
-                        payload=base_payload,
-                        is_return_leg=False,
-                    )
-                    save_delivery_quote(
-                        user=user,
-                        service_type="full_service_dropoff",
-                        serializer_data=order_payload,
-                        uber_data={
-                          "id": session.metadata["quote_id"],
-                          "fee": delivery.fee,
-                          "currency": delivery.currency or "USD",
-                          "currency_type": delivery.currency or "USD",
-                          "dropoff_eta": delivery.dropoff_eta,
-                          "duration": None,  # not available after delivery creation
-                          "pickup_duration": None,
-                          "dropoff_deadline": delivery.dropoff_deadline,
-                          "expires": None,  # quote already used, no longer relevant
-                        },
-                    )
+          save_delivery_quote(
+            user=user,
+            service_type="full_service",
+            serializer_data=order_payload,
+            uber_data={
+              "id": quote_id,
+              "fee": delivery.fee,
+              "currency": delivery.currency or "USD",
+              "currency_type": delivery.currency_type or "USD",
+              "dropoff_eta": delivery.dropoff_eta,
+              "dropoff_deadline": delivery.dropoff_deadline,
+            },
+          )
 
-                order.status = "delivery_scheduled"
-                order.save()
+        order.status = "delivery_scheduled"
+        order.uber_parent_delivery_id = delivery.id  # assuming your Order model has this field
+        order.save()
 
-            except Exception as e:
-                # Uber failed — keep order, card is still saved
-                order.status = "delivery_failed"
-                order.save()
-                # Optional: notify admin or queue retry
+      except Exception as e:
+        print(f"Uber delivery creation failed after card save: {e}")
+        order.status = "delivery_failed"
+        order.save()
+        # Optional: notify admin, allow retry from frontend
 
-        # Optional: send confirmation email/SMS
+    # Optional: send confirmation to user (email/push)
 
-    return HttpResponse(status=200)
+  return HttpResponse(status=200)
 
 @api_view(['POST'])
 @permission_classes([IsCustomer])

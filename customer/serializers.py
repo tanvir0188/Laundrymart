@@ -33,7 +33,9 @@ class VendorSerializer(serializers.ModelSerializer):
               'operating_hours_start_saturday', 'operating_hours_end_saturday', 'is_closed_saturday'
               ]
   def get_distance(self, obj):
-    value = getattr(obj, 'distance', None)
+    value = getattr(obj, "distance", None)
+    if value is None:
+      return None
     return round(value, 1)
 
 

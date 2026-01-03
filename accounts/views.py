@@ -433,7 +433,7 @@ class CustomerProfileAPIView(APIView):
   def get(self, request):
     user = request.user
 
-    serializer = CustomerProfileSerializer(user)
+    serializer = CustomerProfileSerializer(user,context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
   @extend_schema(

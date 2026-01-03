@@ -1,4 +1,4 @@
-from django.db.models import Avg, FloatField, Value
+from django.db.models import Avg, Case, FloatField, IntegerField, Value, When
 from django.db.models.expressions import RawSQL
 from django.db.models.functions import Coalesce
 from django.shortcuts import render
@@ -9,6 +9,7 @@ from drf_spectacular.contrib import django_filters
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -58,8 +59,16 @@ class VendorAPIView(ListAPIView):
   )
   def get(self, request, *args, **kwargs):
     return super().get(request, *args, **kwargs)
+  def get_serializer_context(self):
+    context = super().get_serializer_context()
+    context["request"] = self.request   # already included, but explicit is fine
+    return context
   def get_queryset(self):
     user = self.request.user
+    if user.lat is None or user.lng is None:
+      raise ValidationError({
+        "error": "Please add your location first."
+      })
 
     try:
       lat = float(self.request.query_params.get('lat', user.lat))
@@ -74,14 +83,30 @@ class VendorAPIView(ListAPIView):
       is_superuser=False
     ).annotate(
       average_rating=Coalesce(
-        Avg('received_reviews__rating', output_field=FloatField()),
+        Avg("received_reviews__rating", output_field=FloatField()),
         Value(0.0)
+      ),
+
+      # Flag vendors missing location
+      has_no_location=Case(
+        When(lat__isnull=True, then=Value(1)),
+        When(lng__isnull=True, then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField()
       )
     )
 
     if lat is not None and lng is not None:
       qs = qs.annotate(
-        distance=calculate_distance_sql(lat, lng)
+        distance=Case(
+          When(
+            lat__isnull=False,
+            lng__isnull=False,
+            then=calculate_distance_sql(lat, lng)
+          ),
+          default=Value(None),
+          output_field=FloatField()
+        )
       )
 
     return qs
@@ -138,7 +163,7 @@ class ChooseForCustomer(APIView):
       )
 
     selected_vendor = candidates.first()
-    serializer = VendorSerializer(selected_vendor)
+    serializer = VendorSerializer(selected_vendor, context={'request': request})
 
     return Response(serializer.data, status=status.HTTP_200_OK)
 

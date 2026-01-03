@@ -14,20 +14,20 @@ def create_stripe_customer(user):
       # Create a new customer in Stripe
       customer = stripe.Customer.create(
         email=user.email or None,
-        name=user.full_nameZ,  # Assuming Django's User model
+        name=user.full_name,  # Assuming Django's User model
         metadata={'django_user_id': user.id}
       )
       user.stripe_customer_id = customer.id
       user.save()
 
-      return customer.id
+      return {'customer_id':customer.id, 'is_new': True}
 
     except Exception as e:
       # Log the error
       print(f"Error creating Stripe customer: {str(e)}")
       return None
 
-  return user.stripe_customer_id
+  return {'customer_id':user.stripe_customer_id, 'is_new': False}
 
 def create_setup_checkout_session(order, success_url, cancel_url):
   """
@@ -86,3 +86,40 @@ def sync_payment_method(user, payment_method_id):
     except Exception as e:
       print(f"Error syncing payment method: {str(e)}")
       return None
+import stripe
+from typing import Dict, Any, List, Optional
+
+
+def create_setup_intent(stripe_customer_id: str, metadata: dict = None) -> Dict[str, Any]:
+  """
+  Create a SetupIntent to add a new card in-app (used in payment settings).
+  No redirect to Stripe Checkout – fully handled in your mobile/web form.
+
+  Args:
+      stripe_customer_id: Stripe Customer ID from user.stripe_customer_id
+      metadata: Optional metadata (e.g., {"django_user_id": str(user.id)})
+
+  Returns:
+      Dict with client_secret for frontend use
+  """
+  try:
+    params = {
+      "customer": stripe_customer_id,
+      "payment_method_types": ["card"],
+      "usage": "off_session",  # Allows future off-session charges
+    }
+    if metadata:
+      params["metadata"] = metadata
+
+    setup_intent = stripe.SetupIntent.create(**params)
+
+    return {
+      "success": True,
+      "client_secret": setup_intent.client_secret,
+      "setup_intent_id": setup_intent.id,
+    }
+
+  except stripe.error.StripeError as e:
+    return {"success": False, "error": str(e)}
+  except Exception as e:
+    return {"success": False, "error": f"Unexpected error: {str(e)}"}

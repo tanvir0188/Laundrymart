@@ -16,17 +16,24 @@ data = {
 }
 response=
 {
-  "kind": "delivery_quote",
-  "id": "dqt_BiOsHEehR8W0zuTfL0_33A",
-  "created": "2025-12-23T06:07:57.938Z",
-  "expires": "2025-12-23T06:22:57.938Z",
+  "service_type": "drop_off",
+  "pickup_address": "{\"street_address\": [\"20 W 34th St\", \"Floor 2\"],\"state\":\"NY\",\"city\":\"New York\",\"zip_code\":\"10001\",\"country\":\"US\"}",
+  "dropoff_address": "{\"street_address\": [\"285 Fulton St\", \"\"],\"state\":\"NY\",\"city\":\"New York\",\"zip_code\":\"10006\",\"country\":\"US\"}",
+  "pickup_latitude": 40.74865,
+  "pickup_longitude": -73.9853,
+  "dropoff_latitude": 40.71274,
+  "dropoff_longitude": -74.01338,
+  "pickup_phone_number": "+8801853958635",
+  "dropoff_phone_number": "+8801853958636",
+  "quote_id": "dqt_nnsXcehRRe2udRaDS5DtMQ",
   "fee": 999,
   "currency": "usd",
   "currency_type": "USD",
-  "dropoff_eta": "2025-12-23T06:54:17Z",
+  "expires": "2026-01-03T09:24:56.422Z",
+  "dropoff_eta": "2026-01-03T09:56:27Z",
   "duration": 46,
-  "pickup_duration": 8,
-  "dropoff_deadline": "2025-12-23T07:24:51Z"
+  "pickup_duration": 9,
+  "dropoff_deadline": "2026-01-03T10:27:43Z"
 }
 
 create delivery
