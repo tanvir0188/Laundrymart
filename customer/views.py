@@ -17,7 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import User
+from accounts.models import LaundrymartStore, User
 from common_utils.distance_utils import calculate_distance_miles, calculate_distance_sql, get_best_location
 from customer.serializers import ReviewSerializer, VendorSerializer
 from laundrymart.permissions import IsCustomer
@@ -65,23 +65,31 @@ class VendorAPIView(ListAPIView):
     return context
   def get_queryset(self):
     user = self.request.user
-    if user.lat is None or user.lng is None:
-      raise ValidationError({
-        "error": "Please add your location first."
-      })
+    lat_param = self.request.query_params.get('lat')
+    lng_param = self.request.query_params.get('lng')
 
-    try:
-      lat = float(self.request.query_params.get('lat', user.lat))
-      lng = float(self.request.query_params.get('lng', user.lng))
-    except (TypeError, ValueError):
-      # fallback if user.lat or user.lng is None
-      lat = None
-      lng = None
+    # Handle latitude and longitude
+    if lat_param and lng_param:
+      try:
+        lat = float(lat_param)
+        lng = float(lng_param)
+      except (TypeError, ValueError):
+        raise ValidationError({"error": "Invalid latitude or longitude format."})
+    else:
+      # Fallback to user's saved location
+      if not user.lat or not user.lng:
+        raise ValidationError({
+          "error": "Please add your location first."
+        })
+      try:
+        lat = float(user.lat)
+        lng = float(user.lng)
+      except (TypeError, ValueError):
+        raise ValidationError({
+          "error": "Your saved location is invalid. Please update it."
+        })
 
-    qs = User.objects.filter(
-      is_staff=True,
-      is_superuser=False
-    ).annotate(
+    qs = LaundrymartStore.objects.annotate(
       average_rating=Coalesce(
         Avg("received_reviews__rating", output_field=FloatField()),
         Value(0.0)
@@ -102,7 +110,7 @@ class VendorAPIView(ListAPIView):
           When(
             lat__isnull=False,
             lng__isnull=False,
-            then=calculate_distance_sql(lat, lng)
+            then=calculate_distance_sql(lat, lng)  # Placeholder for actual distance calculation logic
           ),
           default=Value(None),
           output_field=FloatField()

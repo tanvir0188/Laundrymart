@@ -16,6 +16,7 @@ STATUS_CHOICES=[
   ('rejected', 'Rejected'),
 ]
 class DeliveryQuote(models.Model):
+  scheduled_pickup_time=models.DateTimeField(blank=True, null=True)
   service_type=models.CharField(max_length=50, blank=True, null=True, choices=SERVICE_TYPE_CHOICE)
   status=models.CharField(max_length=50, blank=True, null=True, choices=STATUS_CHOICES, default='pending')
   quote_id = models.CharField(blank=True, null=True,unique=True, max_length=255)

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Service, User
+from .models import LaundrymartStore, Service, User
 # Register your models here.
 
 class UserAdmin(admin.ModelAdmin):
@@ -8,4 +8,11 @@ class UserAdmin(admin.ModelAdmin):
     
 admin.site.register(User, UserAdmin)
 
-admin.site.register(Service)
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+  def formfield_for_foreignkey(self, db_field, request, **kwargs):
+    if db_field.name == "vendor":
+      kwargs["queryset"] = User.objects.filter(is_staff=True)
+    return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+admin.site.register(LaundrymartStore)

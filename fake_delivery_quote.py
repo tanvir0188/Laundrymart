@@ -1,0 +1,56 @@
+import random
+
+from faker import Faker
+from datetime import datetime, timedelta
+from accounts.models import User
+from fake_data import d, random_lat_lng
+from uber.models import DeliveryQuote, SERVICE_TYPE_CHOICE, STATUS_CHOICES  # Adjust to your app's import path
+
+fake = Faker()
+
+
+def generate_fake_delivery_quote():
+  # Random customer
+  customer = User.objects.filter(is_staff=False).order_by('?').first()  # Get a random customer from the DB
+
+  # Random pickup/dropoff lat/lng
+  pickup_lat, pickup_lng = random_lat_lng()
+  dropoff_lat, dropoff_lng = random_lat_lng()
+
+  # Generate a random quote_id
+  quote_id = fake.unique.uuid4()
+
+  # Generate random times
+  scheduled_pickup_time = fake.date_time_this_month()
+  dropoff_eta = scheduled_pickup_time + timedelta(hours=random.randint(1, 5))
+  expires = scheduled_pickup_time + timedelta(hours=24)
+
+  # Generate random fee and currency
+  fee = d(random.uniform(10.0, 100.0))
+  currency = "USD"
+
+  delivery_quote = DeliveryQuote.objects.create(
+    quote_id=quote_id,
+    customer=customer,
+    scheduled_pickup_time=scheduled_pickup_time,
+    service_type=random.choice([x[0] for x in SERVICE_TYPE_CHOICE]),
+    status=random.choice([x[0] for x in STATUS_CHOICES]),
+    pickup_address=fake.address(),
+    dropoff_address=fake.address(),
+    pickup_latitude=pickup_lat,
+    pickup_longitude=pickup_lng,
+    dropoff_latitude=dropoff_lat,
+    dropoff_longitude=dropoff_lng,
+    fee=fee,
+    currency=currency,
+    dropoff_eta=dropoff_eta,
+    expires=expires,
+  )
+  return delivery_quote
+
+
+# Generate 50 fake delivery quotes
+for _ in range(50):
+  generate_fake_delivery_quote()
+
+

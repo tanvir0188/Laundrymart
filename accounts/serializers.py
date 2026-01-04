@@ -9,7 +9,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import SecondaryLocation, Service, User
+from .models import LaundrymartStore, SecondaryLocation, Service, User
 import random
 
 class CreateUserSerializer(serializers.ModelSerializer):
@@ -205,10 +205,12 @@ class ServiceSerializer(serializers.ModelSerializer):
 class VendorProfileSerializer(serializers.ModelSerializer):
   vendor_services = ServiceSerializer(many=True)
   class Meta:
-    model = User
-    fields = ['id', 'full_name', 'email','is_verified', 'phone_number', 'image','location', 'lat', 'lng',
-              'laundrymart_name', 'price_per_pound', 'service_fee', 'minimum_order_weight','external_store_id',
-              'daily_capacity_limit', 'vendor_description','vendor_services',
+    model = LaundrymartStore
+    fields = [
+              'id', 'laundrymart_name', 'store_id', 'image', 'laundrymart_logo', 'location', 'lat', 'lng',
+              'vendor_description', 'price_per_pound', 'service_fee', 'minimum_order_weight', 'store_id',
+              'daily_capacity_limit', 'vendor_services',
+
               'turnaround_time_minimum_sunday', 'turnaround_time_maximum_sunday',
               'turnaround_time_minimum_monday', 'turnaround_time_maximum_monday',
               'turnaround_time_minimum_tuesday', 'turnaround_time_maximum_tuesday',
@@ -276,7 +278,7 @@ class VendorProfileSerializer(serializers.ModelSerializer):
 
 class VendorSettingSerializer(serializers.ModelSerializer):
   class Meta:
-    model = User
+    model = LaundrymartStore
     fields = ['push_and_email_alerts', 'auto_accept_orders']
 
 class CustomerSettingSerializer(serializers.ModelSerializer):

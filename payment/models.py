@@ -73,6 +73,7 @@ class Order(models.Model):
   # Status flow
   STATUS_CHOICES = [
     ('pending_setup', 'Pending Card Setup'),
+    ('processing', 'Processing – Creating Delivery'),
     ('card_saved', 'Card Saved – Awaiting Pickup'),
     ('picked_up', 'Picked Up'),
     ('weighed', 'Weighed & Priced'),
@@ -97,6 +98,24 @@ class Order(models.Model):
   def __str__(self):
     return f"Order {self.uuid} – {self.user} – {self.status}"
 
+# models.py (add these fields via migration)
+class PendingStripeOrder(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pending_stripe_orders')
+    metadata = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=[("pending", "Pending"), ("completed", "Completed"), ("failed", "Failed")],
+        default="pending"
+    )
+    stripe_session_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
+
+    def __str__(self):
+        return f"PendingStripeOrder for {self.user.email} at {self.created_at}"
+
+    class Meta:
+        ordering = ['-created_at']
 
 class Payment(models.Model):
   """

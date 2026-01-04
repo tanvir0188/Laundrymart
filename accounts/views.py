@@ -458,7 +458,8 @@ class VendorProfileAPIView(APIView):
 
   def get(self, request):
     user = request.user
-    serializer = VendorProfileSerializer(user)
+    laundrymart= user.laundrymart_store
+    serializer = VendorProfileSerializer(laundrymart)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
   @extend_schema(
@@ -467,7 +468,8 @@ class VendorProfileAPIView(APIView):
   )
   def patch(self, request):
     user = request.user
-    serializer = VendorProfileSerializer(user, data=request.data, partial=True, context={'request': request})
+    laundrymart= user.laundrymart_store
+    serializer = VendorProfileSerializer(laundrymart, data=request.data, partial=True, context={'request': request})
     if serializer.is_valid():
       serializer.save()
       return Response(serializer.data, status=status.HTTP_200_OK)

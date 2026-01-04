@@ -2,10 +2,17 @@
 import stripe
 from django.conf import settings
 
-from payment.models import SavedPaymentMethod
+from payment.models import PendingStripeOrder, SavedPaymentMethod
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
+
+def create_pending_stripe_order(user, metadata):
+  pending_order = PendingStripeOrder.objects.create(
+    user=user,
+    metadata=metadata
+  )
+  return pending_order
 def create_stripe_customer(user):
   """Create Stripe Customer if not exists in User model"""
   # Check if user already has a Stripe customer ID
@@ -123,3 +130,37 @@ def create_setup_intent(stripe_customer_id: str, metadata: dict = None) -> Dict[
     return {"success": False, "error": str(e)}
   except Exception as e:
     return {"success": False, "error": f"Unexpected error: {str(e)}"}
+
+def list_saved_payment_methods(stripe_customer_id: str) -> List[Dict[str, Any]]:
+  """
+  List all saved card payment methods for a Stripe customer.
+
+  Args:
+      stripe_customer_id: Stripe Customer ID from user.stripe_customer_id
+  Returns:
+      List of payment method dicts with card details
+  """
+  try:
+    payment_methods = stripe.PaymentMethod.list(
+      customer=stripe_customer_id,
+      type="card"
+    )
+
+    cards = []
+    for pm in payment_methods.data:
+      cards.append({
+        "id": pm.id,
+        "brand": pm.card.brand,
+        "last4": pm.card.last4,
+        "exp_month": pm.card.exp_month,
+        "exp_year": pm.card.exp_year,
+      })
+
+    return cards
+
+  except stripe.error.StripeError as e:
+    print(f"Stripe error listing payment methods: {str(e)}")
+    return []
+  except Exception as e:
+    print(f"Unexpected error listing payment methods: {str(e)}")
+    return []

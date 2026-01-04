@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from accounts.models import Service, User
+from accounts.models import LaundrymartStore, Service, User
 from common_utils.distance_utils import calculate_distance_miles, get_best_location
 from customer.models import Review
 
@@ -19,10 +19,10 @@ class VendorSerializer(serializers.ModelSerializer):
   vendor_services = ServiceSerializer(many=True, read_only=True)
 
   class Meta:
-    model = User
-    fields = ['id', 'laundrymart_name','store_id','image', 'location','lat', 'lng', 'vendor_description', 'distance','price_per_pound',
-
-              'average_rating','get_turnaround_time','is_open_now', 'closes_at', 'vendor_services',
+    model = LaundrymartStore
+    fields = ['id', 'laundrymart_name','store_id','image','laundrymart_logo', 'location','lat', 'lng', 'vendor_description',
+              'distance','price_per_pound','average_rating','get_turnaround_time','is_open_now',
+              'closes_at', 'vendor_services',
 
               'operating_hours_start_sunday', 'operating_hours_end_sunday', 'is_closed_sunday',
               'operating_hours_start_monday', 'operating_hours_end_monday', 'is_closed_monday',
@@ -57,5 +57,5 @@ class VendorSerializer(serializers.ModelSerializer):
 class ReviewSerializer(serializers.ModelSerializer):
   class Meta:
     model=Review
-    fields = ['user', 'vendor', 'rating', 'created_at']
+    fields = ['user', 'laundrymart', 'rating', 'created_at']
     read_only_fields = ['user', 'vendor', 'created_at']
