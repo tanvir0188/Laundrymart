@@ -46,49 +46,7 @@ def create_vendor():
     full_name=fake.company(),
     is_active=True,
     is_verified=True,
-    is_staff=True,
-    laundrymart_name=fake.company(),
-    location=fake.address(),
-    lat=str(lat),
-    lng=str(lng),
-
-    price_per_pound=d(random.uniform(1.5, 4.5)),
-    service_fee=d(random.uniform(1, 3)),
-
-    minimum_order_weight=d(random.uniform(3, 10)),
-    daily_capacity_limit=d(random.uniform(50, 150)),
-
-    # Turnaround times (hours)
-    turnaround_time_minimum_monday=12,
-    turnaround_time_maximum_monday=24,
-    turnaround_time_minimum_tuesday=12,
-    turnaround_time_maximum_tuesday=24,
-    turnaround_time_minimum_wednesday=12,
-    turnaround_time_maximum_wednesday=24,
-    turnaround_time_minimum_thursday=12,
-    turnaround_time_maximum_thursday=24,
-    turnaround_time_minimum_friday=12,
-    turnaround_time_maximum_friday=24,
-    turnaround_time_minimum_saturday=12,
-    turnaround_time_maximum_saturday=24,
-    turnaround_time_minimum_sunday=12,
-    turnaround_time_maximum_sunday=24,
-
-    # Operating hours
-    operating_hours_start_monday=time(9, 0),
-    operating_hours_end_monday=time(21, 0),
-    operating_hours_start_tuesday=time(9, 0),
-    operating_hours_end_tuesday=time(21, 0),
-    operating_hours_start_wednesday=time(9, 0),
-    operating_hours_end_wednesday=time(21, 0),
-    operating_hours_start_thursday=time(9, 0),
-    operating_hours_end_thursday=time(21, 0),
-    operating_hours_start_friday=time(9, 0),
-    operating_hours_end_friday=time(21, 0),
-    operating_hours_start_saturday=time(10, 0),
-    operating_hours_end_saturday=time(20, 0),
-    operating_hours_start_sunday=time(10, 0),
-    operating_hours_end_sunday=time(18, 0),
+    is_staff=True
   )
   return user
 

@@ -7,7 +7,7 @@ from laundrymart import settings
 from django.core.validators import MinValueValidator
 import uuid
 
-from accounts.models import User
+from accounts.models import LaundrymartStore, User
 
 
 class SavedPaymentMethod(models.Model):
@@ -42,7 +42,7 @@ class Order(models.Model):
   """
   uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
   user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
-  service_provider=models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_orders', blank=True, null=True)
+  service_provider=models.ForeignKey(LaundrymartStore, on_delete=models.CASCADE, related_name='received_orders', blank=True, null=True)
 
   # Addresses (stored as JSON strings to match Uber format – you can change later if needed)
   pickup_address = models.TextField(blank=True, null=True)

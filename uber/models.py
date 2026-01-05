@@ -61,6 +61,18 @@ DELIVERABLE_ACTION_CHOICES=[
   ('deliverable_action_meet_at_door', 'deliverable_action_meet_at_door'),
   ('deliverable_action_leave_at_door', 'deliverable_action_leave_at_door')
 ]
+DELIVERY_STATUS_CHOICES=[
+  ('pending', 'Pending'),
+  ('pickup_true', 'Pickup True'),
+  ('pickup_false', 'Pickup False'),
+  ('pickup_complete', 'Pickup Complete'),
+  ('dropoff_true', 'Dropoff True'),
+  ('dropoff_false', 'Dropoff False'),
+  ('delivered', 'Delivered'),
+  ('canceled', 'Canceled'),
+  ('returned', 'Returned')
+
+]
 class Delivery(models.Model):
   delivery_uid = models.CharField(max_length=255,unique=True,blank=True,null=True)
 
@@ -103,7 +115,7 @@ class Delivery(models.Model):
   deliverable_action = models.CharField(max_length=100, blank=True, null=True, choices=DELIVERABLE_ACTION_CHOICES, default='deliverable_action_meet_at_door')
 
   # Response fields from Uber (updated via webhook or polling)
-  status = models.CharField(max_length=50, blank=True, null=True)  # e.g., pending, driver_en_route, completed
+  status = models.CharField(max_length=100, blank=True, null=True, choices=DELIVERY_STATUS_CHOICES)  # e.g., pending, driver_en_route, completed
   fee = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # In cents
   total_fee=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
   currency = models.CharField(max_length=3, default='usd')

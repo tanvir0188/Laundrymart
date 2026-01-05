@@ -27,7 +27,7 @@ class MessageAPIView(APIView):
     if serializer.is_valid():
       message = serializer.save(user=request.user, room=room)  # 👈 explicitly set user + room
 
-      message_data = MessageSerializer(message).data
+      message_data = MessageSerializer(message, context={'request':request}).data
       broadcast_message(room.id, message_data)
 
       return Response(message_data, status=status.HTTP_201_CREATED)
