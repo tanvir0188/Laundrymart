@@ -43,6 +43,7 @@ def generate_fake_delivery():
         fee=fee,
         total_fee=total_fee,
         currency=currency,
+        external_store_id=quote.external_store_id,
         tracking_url=tracking_url,
         pickup_latitude=pickup_lat,
         pickup_longitude=pickup_lng,

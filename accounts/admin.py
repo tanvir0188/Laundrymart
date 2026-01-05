@@ -15,4 +15,8 @@ class ServiceAdmin(admin.ModelAdmin):
       kwargs["queryset"] = User.objects.filter(is_staff=True)
     return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-admin.site.register(LaundrymartStore)
+class LaundrymartStoreAdmin(admin.ModelAdmin):
+    list_display = ('laundrymart_name','store_id')
+    list_editable = ('laundrymart_name',)
+    list_display_links = ('store_id',)
+admin.site.register(LaundrymartStore, LaundrymartStoreAdmin)
