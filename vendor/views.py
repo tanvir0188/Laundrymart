@@ -4,7 +4,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from laundrymart.permissions import IsStaff
+from payment.models import Order
 from uber.models import DeliveryQuote
+from vendor.serializers import DashboardSerializer
 
 
 class AcceptOrRejectQuoteAPIView(APIView):
@@ -28,3 +30,14 @@ class AcceptOrRejectQuoteAPIView(APIView):
       "quote_id": quote.quote_id,
       "status": f'You have {quote.status} the quote.'
     }, status=status.HTTP_200_OK)
+
+class DashboardAPIView(APIView):
+  permission_classes = [IsStaff]
+
+  def get(self, request):
+    user = request.user
+    associated_laundrymart = user.laundrymart_store
+    store_uuid=associated_laundrymart.store_id
+    serializer = DashboardSerializer(context={'request': request, 'store_uuid': store_uuid, 'associated_laundrymart': associated_laundrymart})
+    return Response(serializer.data, status=status.HTTP_200_OK)
+

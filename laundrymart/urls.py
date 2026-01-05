@@ -27,6 +27,7 @@ urlpatterns = [
     path('customers/api/',include('customer.urls')),
     path('message/api/',include('messaging.urls')),
     path('payment/api/',include('payment.urls')),
+    path('vendor/api/',include('vendor.urls')),
     #path('api-auth/', include('rest_framework.urls')),
 
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
