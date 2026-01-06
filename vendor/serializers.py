@@ -8,6 +8,7 @@ from messaging.models import VendorNotification
 from messaging.serializers import VendorNotificationSerializer
 from payment.models import Order
 from uber.models import DeliveryQuote
+from uber.serializers import ManifestItemSerializer
 
 
 class DashboardSerializer(serializers.Serializer):
@@ -58,9 +59,9 @@ class DashboardSerializer(serializers.Serializer):
     recent_orders = Order.objects.filter(
       service_provider=associated_laundrymart
     ).only('id', 'uuid', 'user_id', 'status', 'weight_in_pounds', 'created_at', 'service_provider_id').order_by('-created_at')[:5]  # Get the 5 most recent orders
-    return OrderSerializer(recent_orders, many=True, context={'associated_laundrymart':associated_laundrymart}).data
+    return DashboardOrderSerializer(recent_orders, many=True, context={'associated_laundrymart':associated_laundrymart}).data
 
-class OrderSerializer(serializers.ModelSerializer):
+class DashboardOrderSerializer(serializers.ModelSerializer):
   user = serializers.StringRelatedField()
   price=serializers.SerializerMethodField()
   class Meta:
@@ -71,5 +72,15 @@ class OrderSerializer(serializers.ModelSerializer):
     store_fee = associated_laundrymart.price_per_pound
     total_fee = store_fee * obj.weight_in_pounds+(associated_laundrymart.service_fee or 0)
     return round(total_fee,2)
+
+class OrderDetailSerializer(serializers.ModelSerializer):
+  user = serializers.StringRelatedField()
+  service_provider = serializers.StringRelatedField()
+  manifest_items = ManifestItemSerializer(many=True)
+  class Meta:
+    model = Order
+    fields = ['id','order_id','phone_number', 'time_ago', 'user', 'manifest_items', 'service', 'total_cost', 'vendor_fee', 'address']
+
+
 
 

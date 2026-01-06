@@ -2,6 +2,7 @@ import requests
 from django.db import models
 from django.core.validators import MinValueValidator
 from accounts.models import User
+from payment.models import Order
 from uber.cache_access_token import UBER_BASE_URL, uber_headers
 
 # Create your models here.
@@ -154,7 +155,9 @@ BAG_CHOICES=[
   ('medium', 'Medium')
 ]
 class ManifestItem(models.Model):
-  delivery=models.ForeignKey(Delivery,on_delete=models.CASCADE)
+  delivery_quote=models.ForeignKey(DeliveryQuote, on_delete=models.CASCADE, blank=True, null=True, related_name='manifest_items')
+  delivery=models.ForeignKey(Delivery,on_delete=models.CASCADE, blank=True, null=True, related_name='manifest_items')
+  stripe_order=models.ForeignKey(Order,on_delete=models.CASCADE, blank=True, null=True, related_name='manifest_items')
   name=models.CharField(max_length=255, default='Bag')
   quantity=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
   size=models.CharField(max_length=255, choices=BAG_CHOICES)

@@ -469,6 +469,8 @@ class VendorProfileAPIView(APIView):
   def patch(self, request):
     user = request.user
     laundrymart= user.laundrymart_store
+    if user.groups.filter(name='employee_without_edit_permission').exists():
+      return Response({"error": "You do not have permission to edit this information"}, status=status.HTTP_403_FORBIDDEN)
     serializer = VendorProfileSerializer(laundrymart, data=request.data, partial=True, context={'request': request})
     if serializer.is_valid():
       serializer.save()
@@ -492,8 +494,8 @@ class ManageVendorSettingsAPIView(APIView):
 
   def get(self, request):
     user = request.user
-
-    serializer = VendorSettingSerializer(user)
+    laundrymart= user.laundrymart_store
+    serializer = VendorSettingSerializer(laundrymart)
     return Response(serializer.data, status=status.HTTP_200_OK)
   @extend_schema(
     request=VendorSettingSerializer,
@@ -501,7 +503,10 @@ class ManageVendorSettingsAPIView(APIView):
   )
   def patch(self, request):
     user = request.user
-    serializer = VendorSettingSerializer(user, data=request.data, partial=True)
+    laundrymart = user.laundrymart_store
+    if user.groups.filter(name='employee_without_edit_permission').exists():
+      return Response({"error": "You do not have permission to edit this information"}, status=status.HTTP_403_FORBIDDEN)
+    serializer = VendorSettingSerializer(laundrymart, data=request.data, partial=True)
     if serializer.is_valid():
       serializer.save()
       return Response(serializer.data, status=status.HTTP_200_OK)

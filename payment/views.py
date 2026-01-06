@@ -156,161 +156,37 @@ class ConfirmOrderAPIView(APIView):
       }, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
-@transaction.atomic
-def stripe_webhook_confirm_order(request):
-  payload = request.body
-  sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
-
-  try:
-    event = stripe.Webhook.construct_event(
-      payload, sig_header, STRIPE_WEBHOOK_SECRET
-    )
-  except ValueError:
-    return HttpResponse(status=400)
-  except stripe.error.SignatureVerificationError:
-    return HttpResponse(status=400)
-
-  if event["type"] == "checkout.session.completed":
-    session = event["data"]["object"]
-
-    # Skip if not setup mode (idempotent for other events)
-    if session.mode != "setup":
-      return HttpResponse(status=200)
-
-    pending_order_id = session.metadata.get("pending_order_id")
-    if not pending_order_id:
-      return HttpResponse(status=200)
-
-    # CRITICAL: Idempotency lock with SELECT FOR UPDATE
-    try:
-      pending_order = PendingStripeOrder.objects.select_for_update().get(
-        id=pending_order_id,
-        status="pending"  # Skip if already processed
-      )
-    except PendingStripeOrder.DoesNotExist:
-      # Already processed or doesn't exist - idempotent skip
-      return HttpResponse(status=200)
-
-    # 🔒 Lock acquired - now safe to process once
-
-    try:
-      # Extract data (your existing code)
-      user_id = pending_order.metadata["user_id"]
-      service_type = pending_order.metadata["service_type"]
-      quote_id = pending_order.metadata["quote_id"]
-      return_quote_id = pending_order.metadata.get("return_quote_id", "")
-
-      order_payload = json.loads(pending_order.metadata["order_payload"])
-      user = User.objects.get(id=user_id)
-
-      # Get payment method (your existing code)
-      setup_intent = stripe.SetupIntent.retrieve(session.setup_intent)
-      payment_method_id = setup_intent.payment_method
-
-      # ✅ STEP 1: Create Order FIRST (status=processing)
-      order = Order.objects.create(
-        uuid=uuid4(),
-        user=user,
-        pickup_address=order_payload["pickup_address"],
-        dropoff_address=order_payload["dropoff_address"],
-        stripe_customer_id=session.customer,
-        stripe_payment_method_id=payment_method_id,
-        status="processing",  # ← Changed from "card_saved"
-      )
-
-      delivery_success = False
-      uber_error = None
-
-      if service_type in ["pickup", "full_service"]:
-        base_payload = {
-          "quote_id": quote_id,
-          "pickup_address": order_payload["pickup_address"],
-          "dropoff_address": order_payload["dropoff_address"],
-          "pickup_phone_number": order_payload["pickup_phone_number"],
-          "dropoff_phone_number": order_payload["dropoff_phone_number"],
-          "external_store_id": order_payload.get("external_store_id"),
-          "manifest_total_value": order_payload.get("manifest_total_value"),
-          "manifest_items": order_payload.get("manifest_items", []),
-          "pickup_latitude": order_payload["pickup_latitude"],
-          "pickup_longitude": order_payload["pickup_longitude"],
-          "dropoff_latitude": order_payload["dropoff_latitude"],
-          "dropoff_longitude": order_payload["dropoff_longitude"],
-          "idempotency_key": str(order.uuid),  # Uber idempotency
-        }
-
-        try:
-          if service_type == "pickup":
-            base_payload.update({
-              "dropoff_name": order_payload.get("pickup_name", "LaundryMart"),
-              "pickup_name": user.full_name or "Customer",
-              "deliverable_action": order_payload.get("deliverable_action"),
-            })
-            delivery = create_and_save_delivery(
-              user=user,
-              validated_data=order_payload,
-              payload=base_payload,
-              is_return_leg=False,
-            )
-
-          elif service_type == "full_service":
-            base_payload.update({
-              "pickup_name": user.full_name or "Customer",
-              "dropoff_name": order_payload.get("dropoff_name", "LaundryMart"),
-              "deliverable_action": order_payload.get("deliverable_action"),
-            })
-            delivery = create_and_save_delivery(
-              user=user,
-              validated_data=order_payload,
-              payload=base_payload,
-              is_return_leg=False,
-            )
-
-          # Save quote info
-          save_delivery_quote(
-            user=user,
-            service_type=service_type,
-            serializer_data=order_payload,
-            uber_data={
-              "id": quote_id,
-              "fee": delivery.fee,
-              "currency": delivery.currency or "USD",
-              "currency_type": delivery.currency_type or "USD",
-              "dropoff_eta": delivery.dropoff_eta,
-              "dropoff_deadline": delivery.dropoff_deadline,
-            },
-          )
-
-          # ✅ Uber succeeded
-          delivery_success = True
-          order.status = "delivery_scheduled"
-          order.uber_parent_delivery_id = delivery.id
-          order.save()
-
-        except Exception as uber_error:
-          uber_error = str(uber_error)
-          print(f"Uber delivery failed: {uber_error}")
-
-      # ✅ STEP 3: Mark pending order COMPLETE (atomic)
-      pending_order.status = "completed"
-      pending_order.stripe_session_id = session.id
-      pending_order.stripe_customer_id = session.customer
-      pending_order.save(update_fields=["status", "stripe_session_id", "stripe_customer_id"])
-
-      if not delivery_success:
-        # Uber failed - mark order for retry
-        order.status = "delivery_failed"
-        order.uber_error = uber_error
-        order.save()
-
-    except Exception as e:
-      # Critical error - mark failed but DON'T delete
-      pending_order.status = "failed"
-      pending_order.save(update_fields=["status"])
-      print(f"Webhook critical error: {e}")
-      return HttpResponse(status=500)
-
-  return HttpResponse(status=200)
+# @csrf_exempt
+# @transaction.atomic
+# def stripe_webhook_confirm_order(request):
+#   payload = request.body
+#   sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
+#
+#   try:
+#     event = stripe.Webhook.construct_event(
+#       payload, sig_header, STRIPE_WEBHOOK_SECRET
+#     )`
+#   except ValueError:
+#     return HttpResponse(status=400)
+#   except stripe.error.SignatureVerificationError:
+#     return HttpResponse(status=400)
+#
+#   if event["type"] == "checkout.session.completed":
+#     session = event["data"]["object"]
+#
+#           save_delivery_quote(
+#             user=user,
+#             service_type=service_type,
+#             serializer_data=order_payload,
+#             uber_data={
+#               "id": quote_id,
+#               "fee": None,
+#               "currency": None,
+#               "currency_type": None,
+#               "dropoff_eta": None,
+#               "dropoff_deadline": None,
+#             },
+#           )
 
 @api_view(['POST'])
 @permission_classes([IsCustomer])
@@ -591,3 +467,131 @@ def delete_saved_card(request, payment_method_id):
       'success': False,
       'error': str(e)
     }, status=400)
+
+#   class SendOfferToVendorAPIView(APIView):
+#     """
+#     This endpoint is called AFTER the customer has successfully created an Uber quote
+#     via UberCreateQuoteAPIView and has a saved/validated payment method.
+#
+#     It:
+#     1. Validates the saved card (with $0 auth) for higher off-session success rate
+#     2. Saves the delivery quote details in your system (triggers push notification to vendor)
+#     3. Returns success – vendor will later accept/reject via their interface
+#     """
+#     permission_classes = [IsCustomer]  # Your existing customer permission
+#
+#     @extend_schema(
+#       request=SendOfferSerializer,
+#       responses={
+#         200: OpenApiResponse(
+#           description="Offer sent to vendor successfully. Card validated.",
+#           response={
+#             "type": "object",
+#             "properties": {
+#               "message": {"type": "string"},
+#               "quote_id": {"type": "string"},
+#               "estimated_uber_fee": {"type": "number"},
+#               "service_type": {"type": "string"},
+#             }
+#           }
+#         )
+#       }
+#     )
+#     def post(self, request):
+#       serializer = SendOfferSerializer(data=request.data)
+#       serializer.is_valid(raise_exception=True)
+#       quote_data = serializer.validated_data["quote_data"]  # Full response from UberCreateQuoteAPIView
+#
+#       service_type = quote_data["service_type"]
+#
+#       # Extract the main quote_id and fee – handle full_service slightly differently
+#       if service_type == "full_service":
+#         # You can choose to use first_quote or combined logic later
+#         main_quote_id = quote_data["first_quote"]["id"]
+#         uber_fee_cents = quote_data["combined_fee"]  # or calculate as needed
+#       else:
+#         main_quote_id = quote_data["quote_id"]
+#         uber_fee_cents = quote_data["fee"]
+#
+#       # Assume stripe_customer_id is stored on user (from earlier create_stripe_customer)
+#       stripe_customer_id = request.user.stripe_customer_id
+#       if not stripe_customer_id:
+#         return Response({"error": "No Stripe customer linked"}, status=400)
+#
+#       # Optional: Determine default payment method (or let frontend send selected one)
+#       # Here we auto-pick the default or only card
+#       try:
+#         pm_list = stripe.PaymentMethod.list(
+#           customer=stripe_customer_id,
+#           type="card",
+#           limit=1,
+#         )
+#         if not pm_list.data:
+#           return Response({"error": "No saved payment method found"}, status=400)
+#         payment_method_id = pm_list.data[0].id
+#       except Exception as e:
+#         return Response({"error": f"Failed to retrieve payment method: {str(e)}"}, status=500)
+#
+#       # Step 1: Validate the saved card with $0 confirmed off-session PaymentIntent
+#       # (Stripe best practice for increasing future off-session charge success)
+#       try:
+#         pi = stripe.PaymentIntent.create(
+#           amount=0,
+#           currency=quote_data.get("currency", "usd").lower(),
+#           customer=stripe_customer_id,
+#           payment_method=payment_method_id,
+#           off_session=True,
+#           confirm=True,
+#           description=f"Card validation for Uber {service_type} order (quote: {main_quote_id})",
+#           metadata={
+#             "user_id": str(request.user.id),
+#             "service_type": service_type,
+#             "uber_quote_id": main_quote_id,
+#             "validation_type": "pre_delivery_offer",
+#           },
+#         )
+#
+#         if pi.status != "succeeded":
+#           return Response({"error": "Card validation failed – please update payment method"}, status=400)
+#       except stripe.error.CardError as e:
+#         return Response({"error": f"Card declined during validation: {e.user_message or str(e)}"}, status=400)
+#       except Exception as e:
+#         return Response({"error": f"Card validation error: {str(e)}"}, status=500)
+#
+#       # Step 2: Save the quote and trigger vendor notification
+#       # Extract only the fields needed for save_delivery_quote based on your signature
+#       order_payload = {
+#         "pickup_address": quote_data["pickup_address"],
+#         "dropoff_address": quote_data["dropoff_address"],
+#         "pickup_latitude": quote_data["pickup_latitude"],
+#         "pickup_longitude": quote_data["pickup_longitude"],
+#         "dropoff_latitude": quote_data["dropoff_latitude"],
+#         "dropoff_longitude": quote_data["dropoff_longitude"],
+#         "pickup_phone_number": quote_data["pickup_phone_number"],
+#         "dropoff_phone_number": quote_data["dropoff_phone_number"],
+#         # Add any other fields you normally include (manifest_items, etc.) if available
+#       }
+#
+#       uber_data = {
+#         "id": main_quote_id,
+#         "fee": uber_fee_cents,
+#         "currency": quote_data.get("currency"),
+#         "currency_type": quote_data.get("currency_type"),
+#         "dropoff_eta": quote_data.get("dropoff_eta"),
+#         "dropoff_deadline": quote_data.get("dropoff_deadline"),
+#       }
+#
+#       # This call will store the quote and send push notification to vendor
+#       save_delivery_quote(
+#         user=request.user,
+#         service_type=service_type,
+#         serializer_data=order_payload,
+#         uber_data=uber_data,
+#       )
+#
+#       return Response({
+#         "message": "Offer successfully sent to vendor. Your card has been validated.",
+#         "quote_id": main_quote_id,
+#         "estimated_uber_fee": uber_fee_cents / 100.0,  # Display in dollars
+#         "service_type": service_type,
+#       }, status=status.HTTP_200_OK)
