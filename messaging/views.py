@@ -7,8 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from messaging.async_utils import broadcast_message, broadcast_seen_status
-from messaging.models import Message, Room
-from messaging.serializers import MessageSerializer, RoomSerializer
+from messaging.models import Message, Room, VendorNotification
+from messaging.serializers import MessageSerializer, RoomSerializer, VendorNotificationSerializer
 
 
 # Create your views here.
@@ -75,3 +75,48 @@ class RoomAPIView(APIView):
     )
     serializer = RoomSerializer(rooms, many=True, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class VendorNotificationAPIView(APIView):
+  permission_classes = [IsAuthenticated]
+
+  def get(self, request):
+    user = request.user
+    store = user.laundrymart_store
+
+    store.vendor_notifications.filter(seen=False).update(seen=True)
+
+    notifications = store.vendor_notifications.all()
+
+    serializer = VendorNotificationSerializer(notifications, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+  def delete(self, request):
+    user = request.user
+    store = user.laundrymart_store
+
+    store.vendor_notifications.all().delete()
+
+    return Response({"message": "All notifications deleted."}, status=status.HTTP_200_OK)
+
+class VendorNotificationModifyAPIView(APIView):
+  permission_classes = [IsAuthenticated]
+
+  def patch(self, request, notification_id, action='mark_as_read'):
+    user = request.user
+    store = user.laundrymart_store
+
+    notification = get_object_or_404(
+      VendorNotification,
+      id=notification_id,
+      recipient=store  # ensures ownership in the same query
+    )
+    if action == "mark_as_read" or action is None:
+      notification.is_read = True
+      notification.save()
+      return Response({"message": "Notification marked as read."}, status=status.HTTP_200_OK)
+    elif action == "delete":
+      notification.delete()
+      return Response({"message": "Notification deleted."}, status=status.HTTP_200_OK)
+    else:
+      return Response({"error": "Invalid action."}, status=status.HTTP_400_BAD_REQUEST)
