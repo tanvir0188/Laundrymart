@@ -4,6 +4,8 @@ from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
 
+from messaging.models import VendorNotification
+from messaging.serializers import VendorNotificationSerializer
 from payment.models import Order
 from uber.models import DeliveryQuote
 
@@ -12,6 +14,7 @@ class DashboardSerializer(serializers.Serializer):
   order_stats=serializers.SerializerMethodField()
   # revenue_last_seven_days = serializers.SerializerMethodField()
   recent_orders = serializers.SerializerMethodField()
+  alert_notifications=serializers.SerializerMethodField()
 
   def get_order_stats(self, obj):
     associated_laundrymart = self.context.get('associated_laundrymart')
@@ -45,6 +48,11 @@ class DashboardSerializer(serializers.Serializer):
 
   # Convert cents to dollars
   #
+  def get_alert_notifications(self, obj):
+    associated_laundrymart = self.context.get('associated_laundrymart')
+    notifications = VendorNotification.objects.filter(recipient=associated_laundrymart, category='Important', is_read=False).order_by('-created_at')[:2]
+    return VendorNotificationSerializer(notifications, many=True).data
+
   def get_recent_orders(self, obj):
     associated_laundrymart = self.context.get('associated_laundrymart')
     recent_orders = Order.objects.filter(

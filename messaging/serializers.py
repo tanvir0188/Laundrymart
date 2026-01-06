@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from messaging.models import Message, Room
+from messaging.models import Message, Room, VendorNotification
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -144,3 +144,12 @@ class RoomSerializer(serializers.ModelSerializer):
             ).count()
 
         return unseen
+
+class VendorNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VendorNotification
+        fields = [
+            'id', 'category', 'recipient', 'text', 'target_url',
+            'additional_info', 'created_at', 'updated_at', 'is_read', 'seen'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'is_read', 'seen', 'recipient']
