@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -36,8 +39,27 @@ class DashboardAPIView(APIView):
 
   def get(self, request):
     user = request.user
+    print ("User:", user.email)
     associated_laundrymart = user.laundrymart_store
+    current_month = timezone.now().month
+    current_year = timezone.now().year
+    today = timezone.now().date()
+    seven_days_ago = today - timedelta(days=6)
+
+    print("Associated Laundrymart:", associated_laundrymart)
+    if not associated_laundrymart:
+      return Response({"error": "No associated Laundrymart store found."}, status=status.HTTP_404_NOT_FOUND)
     store_uuid=associated_laundrymart.store_id
-    serializer = DashboardSerializer(context={'request': request, 'store_uuid': store_uuid, 'associated_laundrymart': associated_laundrymart})
+    context = {
+      'request': request,
+      'store_uuid': store_uuid,
+      'associated_laundrymart': associated_laundrymart,
+      'current_month': current_month,
+      'current_year': current_year,
+      'last_seven_days_start': seven_days_ago,
+      'last_seven_days_end': today,
+      }
+    serializer = DashboardSerializer(user,context=context)
+    print("Serialized Data:", serializer.data)
     return Response(serializer.data, status=status.HTTP_200_OK)
 

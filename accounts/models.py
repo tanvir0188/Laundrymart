@@ -419,7 +419,7 @@ class Service(models.Model):
   vendor = models.ForeignKey(LaundrymartStore, on_delete=models.CASCADE, related_name='vendor_services')
   image = models.ImageField(blank=True, null=True, upload_to='service_image')
   service_name = models.CharField(max_length=255, blank=False, null=False)
-  price_per_pound=models.DecimalField(max_digits=10, decimal_places=2, blank=False, null=False)
+  price_per_pound=models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
   def __str__(self):
     return self.service_name
