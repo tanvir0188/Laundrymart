@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from accounts.models import LaundrymartStore, Service, User
 from common_utils.distance_utils import calculate_distance_miles, get_best_location
-from customer.models import Review
+from customer.models import OrderReport, OrderReportImage, Review
 
 
 class ServiceSerializer(serializers.ModelSerializer):
@@ -59,3 +59,27 @@ class ReviewSerializer(serializers.ModelSerializer):
     model=Review
     fields = ['user', 'laundrymart', 'rating', 'created_at']
     read_only_fields = ['user', 'vendor', 'created_at']
+
+class OrderReportImageSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = OrderReportImage
+    fields = ['image']  # Only the image field is needed for the upload
+
+class CustomerOrderReportSerializer(serializers.ModelSerializer):
+  images = OrderReportImageSerializer(many=True)  # Handle multiple images
+
+  class Meta:
+    model = OrderReport
+    fields = ['id', 'laundrymart', 'delivery_quote', 'order', 'issue_description', 'created_at', 'images']
+
+  def create(self, validated_data):
+    # Separate the images data from the other validated data
+    images_data = validated_data.pop('images', [])
+
+    # Create the OrderReport instance
+    order_report = OrderReport.objects.create(**validated_data)
+
+    for image_data in images_data:
+      OrderReportImage.objects.create(report=order_report, **image_data)
+
+    return order_report

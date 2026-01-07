@@ -6,7 +6,9 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,7 +16,8 @@ from laundrymart.permissions import IsStaff
 from payment.models import Order
 from uber.models import DeliveryQuote
 from uber.serializers import ManifestItemSerializer
-from vendor.serializers import DashboardSerializer, OrderDetailSerializer
+from vendor.models import OrderReportImage
+from vendor.serializers import DashboardSerializer, OrderDetailSerializer, VendorOrderReportSerializer
 
 
 class AcceptOrRejectQuoteAPIView(APIView):
@@ -188,4 +191,38 @@ class VendorOrdersListAPIView(APIView):
       "results": results,
       "filter": filter_type,
     })
+
+
+class VendorOrderReportAPIView(APIView):
+  permission_classes = [IsStaff]  # Ensure the user is authenticated and a staff member
+
+  def post(self, request):
+    try:
+      # Extract the data from the request
+      data = request.data
+
+      # Deserialize the order report data (including images)
+      serializer = VendorOrderReportSerializer(data=data)
+
+      # Validate the serializer and create the OrderReport if valid
+      if serializer.is_valid():
+
+        order_report = serializer.save()
+
+        # Return the created order report details along with images
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+      else:
+        # If validation fails, return validation errors
+        errors = serializer.errors
+        field, messages = next(iter(errors.items()))
+        readable_field = field.replace('_', ' ').capitalize()
+        first_message = messages[0] if isinstance(messages, list) else messages
+        error_message = f"{readable_field}: {first_message}"
+        return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+    except ValidationError as e:
+      # Handle any validation errors or other issues
+      return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 

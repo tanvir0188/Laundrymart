@@ -1,8 +1,12 @@
+from decimal import Decimal
+
+import humanize
 from django.db.models import Avg, Case, FloatField, IntegerField, Value, When
 from django.db.models.expressions import RawSQL
 from django.db.models.functions import Coalesce
 from django.shortcuts import render
 from django.template.context_processors import request
+from django.utils import timezone
 from django_filters import CharFilter, ChoiceFilter, FilterSet, NumberFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.contrib import django_filters
@@ -19,8 +23,13 @@ from rest_framework.views import APIView
 
 from accounts.models import LaundrymartStore, User
 from common_utils.distance_utils import calculate_distance_miles, calculate_distance_sql, get_best_location
-from customer.serializers import ReviewSerializer, VendorSerializer
+from customer.serializers import CustomerOrderReportSerializer, ReviewSerializer, VendorSerializer
 from laundrymart.permissions import IsCustomer
+from payment.models import Order
+from uber.models import DeliveryQuote
+from uber.serializers import ManifestItemSerializer
+from vendor.views import StandardResultsSetPagination
+
 
 class VendorPagination(PageNumberPagination):
   page_size = 10
@@ -227,3 +236,150 @@ class ReviewAPIView(APIView):
 #       'success': False,
 #       'error': str(e)
 #     }, status=400)
+
+class CustomerOrdersListAPIView(APIView):
+  permission_classes = [IsCustomer]
+  pagination_class = StandardResultsSetPagination
+  @extend_schema(
+    parameters=[
+      OpenApiParameter(
+        name='filter',
+        description='Filter orders by status: pending, active, completed',
+        required=False,
+        type=str
+      )
+    ]
+  )
+
+  def get(self, request):
+    filter_type = request.query_params.get('filter', 'pending').lower()
+
+    user = request.user
+
+    try:
+
+      store = user.laundrymart_store
+      external_store_id = store.store_id
+    except AttributeError:
+      return Response({"error": "Laundrymart store not linked to this user"}, status=400)
+
+    # We'll collect unified results with a creation timestamp for sorting
+    results = []
+
+    if filter_type == 'pending':
+      quotes_qs = DeliveryQuote.objects.filter(
+        external_store_id=external_store_id,
+        status='pending'
+      ).select_related('customer').prefetch_related('manifest_items').order_by('-saved_at')
+
+      paginator = self.pagination_class()
+      page = paginator.paginate_queryset(quotes_qs, request)
+      if page is None:
+        return Response({"error": "Pagination error"}, status=400)
+
+      for quote in page:
+        time_ago = humanize.naturaltime(timezone.now() - quote.saved_at)
+
+        results.append({
+          "id": None,
+          "uuid": None,  # no UUID for quotes
+          "order_id": None,  # frontend uses this as identifier
+          "phone_number": quote.customer.phone_number,
+          "email": quote.customer.email,
+          "time_ago": time_ago,
+          "customer_note": quote.customer_note,
+          "status": quote.get_status_display(),
+          "user": quote.customer.full_name or quote.customer.phone_number or quote.customer.email,
+          # "service_provider": store.laundrymart_name or user.full_name,  # if needed
+          "manifest_items": ManifestItemSerializer(quote.manifest_items.all(), many=True).data,
+          "service": quote.get_service_type_display(),
+          "total_cost": None,
+          "vendor_fee": quote.fee / Decimal('100') if quote.fee else None,
+          "address": quote.dropoff_address or quote.pickup_address,
+          "is_quote": True,
+          "quote_id": quote.quote_id,
+          "expires": quote.expires.isoformat() if quote.expires else None,
+          "created_at": quote.saved_at.isoformat(),
+        })
+
+    elif filter_type in ['active', 'delivered']:
+      status_list = (
+        ['card_saved', 'picked_up', 'weighed', 'charged', 'return_scheduled']
+        if filter_type == 'active'
+        else ['completed']
+      )
+
+      orders_qs = Order.objects.filter(
+        service_provider=store,
+        status__in=status_list
+      ).select_related('user', 'service_provider').prefetch_related('manifest_items') \
+        .order_by('-created_at')
+
+      paginator = self.pagination_class()
+      page = paginator.paginate_queryset(orders_qs, request)
+      if page is None:
+        return Response({"error": "Pagination error"}, status=400)
+
+      for order in page:
+        time_ago = humanize.naturaltime(timezone.now() - order.created_at)
+
+        results.append({
+          "id": order.id,
+          "uuid": str(order.uuid),
+          "order_id": str(order.uuid),  # consistent with frontend expectation
+          "phone_number": order.user.phone_number or order.user.email,
+          "customer_note": order.customer_note,
+          "email": order.user.email,
+          "time_ago": time_ago,
+          "status": order.get_status_display(),
+          "user": str(order.user),  # or order.user.full_name / email if you prefer
+          # "service_provider": store.laundrymart_name,
+          "manifest_items": ManifestItemSerializer(order.manifest_items.all(), many=True).data,
+          "service": "full_service",  # or add a field later if needed
+          "total_cost": order.final_total_cents / Decimal('100') if order.final_total_cents else None,
+          "vendor_fee": order.delivery_fee_cents / Decimal('100') if order.delivery_fee_cents else None,
+          "address": order.dropoff_address or order.pickup_address,
+          "is_quote": False,
+          "quote_id": None,
+          "expires": None,
+          "created_at": order.created_at.isoformat(),
+        })
+
+    else:
+      return Response({"error": "Invalid filter. Use: pending, active, delivered"}, status=400)
+
+    return paginator.get_paginated_response({
+      "results": results,
+      "filter": filter_type,
+    })
+
+class VendorOrderReportAPIView(APIView):
+  permission_classes = [IsCustomer]  # Ensure the user is authenticated and a staff member
+
+  def post(self, request):
+    try:
+      # Extract the data from the request
+      data = request.data
+
+      # Deserialize the order report data (including images)
+      serializer = CustomerOrderReportSerializer(data=data)
+
+      # Validate the serializer and create the OrderReport if valid
+      if serializer.is_valid():
+
+        order_report = serializer.save()
+
+        # Return the created order report details along with images
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+      else:
+        # If validation fails, return validation errors
+        errors = serializer.errors
+        field, messages = next(iter(errors.items()))
+        readable_field = field.replace('_', ' ').capitalize()
+        first_message = messages[0] if isinstance(messages, list) else messages
+        error_message = f"{readable_field}: {first_message}"
+        return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+
+    except ValidationError as e:
+      # Handle any validation errors or other issues
+      return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

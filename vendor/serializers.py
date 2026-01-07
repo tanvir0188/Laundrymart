@@ -9,6 +9,7 @@ from messaging.serializers import VendorNotificationSerializer
 from payment.models import Order
 from uber.models import DeliveryQuote
 from uber.serializers import ManifestItemSerializer
+from vendor.models import OrderReport, OrderReportImage
 
 
 class DashboardSerializer(serializers.Serializer):
@@ -60,6 +61,30 @@ class DashboardSerializer(serializers.Serializer):
       service_provider=associated_laundrymart
     ).only('id', 'uuid', 'user_id', 'status', 'weight_in_pounds', 'created_at', 'service_provider_id').order_by('-created_at')[:5]  # Get the 5 most recent orders
     return DashboardOrderSerializer(recent_orders, many=True, context={'associated_laundrymart':associated_laundrymart}).data
+
+class OrderReportImageSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = OrderReportImage
+    fields = ['image']  # Only the image field is needed for the upload
+
+class VendorOrderReportSerializer(serializers.ModelSerializer):
+  images = OrderReportImageSerializer(many=True)  # Handle multiple images
+
+  class Meta:
+    model = OrderReport
+    fields = ['id', 'laundrymart', 'delivery_quote', 'order', 'issue_description', 'created_at', 'images']
+
+  def create(self, validated_data):
+    # Separate the images data from the other validated data
+    images_data = validated_data.pop('images', [])
+
+    # Create the OrderReport instance
+    order_report = OrderReport.objects.create(**validated_data)
+
+    for image_data in images_data:
+      OrderReportImage.objects.create(report=order_report, **image_data)
+
+    return order_report
 
 class DashboardOrderSerializer(serializers.ModelSerializer):
   user = serializers.StringRelatedField()
