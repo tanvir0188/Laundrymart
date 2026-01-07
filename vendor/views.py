@@ -68,7 +68,7 @@ class DashboardAPIView(APIView):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 class StandardResultsSetPagination(PageNumberPagination):
-  page_size = 20
+  page_size = 10
   page_size_query_param = 'page_size'
   max_page_size = 100
 
@@ -77,18 +77,14 @@ class VendorOrdersListAPIView(APIView):
   pagination_class = StandardResultsSetPagination
 
   def get(self, request):
-    filter_type = request.query_params.get('filter', 'delivered').lower()
+    filter_type = request.query_params.get('filter', 'pending').lower()
 
     user = request.user
-    # Adjust this based on how LaundrymartStore is linked to User
-    # Example: assuming OneToOne or ForeignKey from User to LaundrymartStore
+
     try:
-      # Replace with your actual relation, e.g.:
-      # store = user.laundry_store  # or user.laundry_mart_store
-      # For now assuming a field on User: laundrymart_name + external_store_id logic
-      # Common pattern: User has a related LaundrymartStore
-      store = user.laundrymart_store  # ← CHANGE THIS to your actual relation
-      external_store_id = store.store_id  # field that matches Uber's external_store_id
+
+      store = user.laundrymart_store
+      external_store_id = store.store_id
     except AttributeError:
       return Response({"error": "Laundrymart store not linked to this user"}, status=400)
 
@@ -96,7 +92,6 @@ class VendorOrdersListAPIView(APIView):
     results = []
 
     if filter_type == 'pending':
-      # Pending quotes: DeliveryQuote with status='pending'
       quotes_qs = DeliveryQuote.objects.filter(
         external_store_id=external_store_id,
         status='pending'
@@ -104,17 +99,20 @@ class VendorOrdersListAPIView(APIView):
 
       paginator = self.pagination_class()
       page = paginator.paginate_queryset(quotes_qs, request)
+      if page is None:
+        return Response({"error": "Pagination error"}, status=400)
 
       for quote in page:
         time_ago = humanize.naturaltime(timezone.now() - quote.saved_at)
 
         results.append({
           "id": None,
-          "order_id": quote.quote_id,
+          "uuid": None,  # no UUID for quotes
+          "order_id": None,  # frontend uses this as identifier
           "phone_number": quote.dropoff_phone_number or quote.pickup_phone_number,
           "time_ago": time_ago,
           "user": quote.customer.full_name or quote.customer.phone_number or quote.customer.email,
-          "service_provider": user.laundrymart_store.laundrymart_name or user.full_name,
+          # "service_provider": store.laundrymart_name or user.full_name,  # if needed
           "manifest_items": ManifestItemSerializer(quote.manifest_items.all(), many=True).data,
           "service": quote.service_type or "full_service",
           "total_cost": None,
@@ -127,67 +125,48 @@ class VendorOrdersListAPIView(APIView):
         })
 
     elif filter_type in ['active', 'delivered']:
-
       status_list = (
-
         ['card_saved', 'picked_up', 'weighed', 'charged', 'return_scheduled']
-
         if filter_type == 'active'
-
         else ['completed']
-
       )
 
       orders_qs = Order.objects.filter(
-
         service_provider=store,
-
         status__in=status_list
-
-      ).select_related('user', 'service_provider').prefetch_related('manifest_items').order_by('-created_at')
+      ).select_related('user', 'service_provider').prefetch_related('manifest_items') \
+        .order_by('-created_at')
 
       paginator = self.pagination_class()
-
       page = paginator.paginate_queryset(orders_qs, request)
-
       if page is None:
         return Response({"error": "Pagination error"}, status=400)
-
-      results = []
 
       for order in page:
         time_ago = humanize.naturaltime(timezone.now() - order.created_at)
 
-        # Use your existing serializer
-
-        serialized = OrderDetailSerializer(order).data
-
-        # Override/enhance fields as needed
-
-        serialized.update({
-
-          "id": order.id,  # keep pk if frontend uses it
-
-          "order_id": str(order.uuid),  # This is what you want: UUID shown as order_id
-
+        results.append({
+          "id": order.id,
+          "uuid": str(order.uuid),
+          "order_id": str(order.uuid),  # consistent with frontend expectation
+          "phone_number": order.user.phone_number or order.user.email,
           "time_ago": time_ago,
-
+          "user": str(order.user),  # or order.user.full_name / email if you prefer
+          # "service_provider": store.laundrymart_name,
+          "manifest_items": ManifestItemSerializer(order.manifest_items.all(), many=True).data,
+          "service": "full_service",  # or add a field later if needed
+          "total_cost": order.final_total_cents / Decimal('100') if order.final_total_cents else None,
           "vendor_fee": order.delivery_fee_cents / Decimal('100') if order.delivery_fee_cents else None,
-
-          "address": serialized.get('address') or order.dropoff_address or order.pickup_address,
-
+          "address": order.dropoff_address or order.pickup_address,
           "is_quote": False,
-
+          "quote_id": None,
+          "expires": None,
           "created_at": order.created_at.isoformat(),
-
         })
-
-        results.append(serialized)
 
     else:
       return Response({"error": "Invalid filter. Use: pending, active, delivered"}, status=400)
 
-    # Apply pagination response structure
     return paginator.get_paginated_response({
       "results": results,
       "filter": filter_type,

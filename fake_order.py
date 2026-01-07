@@ -5,26 +5,41 @@ from faker import Faker
 from rest_framework.generics import get_object_or_404
 
 from accounts.models import LaundrymartStore, User
-from fake_data import d, random_lat_lng
 from uber.models import Delivery, DeliveryQuote  # Adjust to your app's import path
 from payment.models import Order  # Adjust to your app's import path
 
 fake = Faker()
+from decimal import Decimal, ROUND_HALF_UP
+def d(value):
+  return Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+LAT_RANGE = (23.70, 23.90)
+LNG_RANGE = (90.35, 90.50)
+
+def random_lat_lng():
+  return (
+    round(random.uniform(*LAT_RANGE), 6),
+    round(random.uniform(*LNG_RANGE), 6),
+  )
 
 def create_fake_order():
-    # Fetch a random delivery that is not already attached to an order
-    delivery = Delivery.objects.exclude(
+    # Fetch a random delivery associated with the service provider and not already attached to an order
+    service_provider_store_id = '46d6e35d-3ca4-4092-8526-24a4bcd814a0'  # LaundrymartStore associated with the delivery
+
+    # Fetch a delivery linked to the given store ID and that is not already attached to an order
+    delivery = Delivery.objects.filter(
+        quote__external_store_id=service_provider_store_id  # Corrected: Now querying through DeliveryQuote
+    ).exclude(
         quote_uid__isnull=False,
         delivery_uid__isnull=False
     ).order_by('?').first()
 
     if not delivery:
-        print("No available deliveries to attach to the order.")
+        print(f"No available deliveries for service provider {service_provider_store_id}. Skipping order creation.")
         return None
 
-    # Extract user and service provider (LaundrymartStore) from the delivery
+    # Extract user (customer) and service provider (LaundrymartStore) from the delivery
     customer = delivery.customer  # User associated with the delivery
-    service_provider_store_id = delivery.external_store_id  # LaundrymartStore associated with the delivery
     service_provider = get_object_or_404(LaundrymartStore, store_id=service_provider_store_id)
 
     # Generate random values for the order (address, lat/lng, etc.)
@@ -34,8 +49,10 @@ def create_fake_order():
     # Create a unique order UUID
     order_uuid = str(uuid4())
 
-    # Randomize the status
-    status = random.choice(['pending_setup', 'processing', 'card_saved', 'picked_up', 'weighed', 'charged', 'return_scheduled', 'completed', 'canceled'])
+    # Randomize the order status
+    status = random.choice(
+        ['pending_setup', 'processing', 'card_saved', 'picked_up', 'weighed', 'charged', 'return_scheduled',
+         'completed', 'canceled'])
 
     # Create random pricing and weights
     weight_in_pounds = d(random.uniform(1.0, 20.0))  # Random weight
@@ -47,7 +64,7 @@ def create_fake_order():
     uber_pickup_quote_id = delivery.quote_uid
     uber_pickup_delivery_id = delivery.delivery_uid
 
-    # Create the order
+    # Create the order and associate it with the delivery and quote
     order = Order.objects.create(
         uuid=order_uuid,
         user=customer,  # Use the user from the delivery
@@ -73,4 +90,4 @@ def create_fake_order():
 
 # Generate 50 fake orders and attach random deliveries
 for _ in range(50):
-    create_fake_order()
+  create_fake_order()

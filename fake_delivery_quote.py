@@ -54,7 +54,7 @@ def generate_fake_delivery_quote():
         currency=currency,
         dropoff_eta=dropoff_eta,
         expires=expires,
-        external_store_id=external_store_id,  # Store external_id here
+        external_store_id='46d6e35d-3ca4-4092-8526-24a4bcd814a0',  # Store external_id here
     )
     return delivery_quote
 

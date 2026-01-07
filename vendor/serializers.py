@@ -75,12 +75,14 @@ class DashboardOrderSerializer(serializers.ModelSerializer):
 
 class OrderDetailSerializer(serializers.ModelSerializer):
   user = serializers.StringRelatedField()
-  service_provider = serializers.StringRelatedField()
+  # service_provider = serializers.StringRelatedField()
   manifest_items = ManifestItemSerializer(many=True)
+  phone_number = serializers.SerializerMethodField()
   class Meta:
     model = Order
-    fields = ['id','order_id','phone_number', 'time_ago', 'user', 'manifest_items', 'service', 'total_cost', 'vendor_fee', 'address']
-
+    fields = ['id','uuid','phone_number', 'time_ago', 'user', 'manifest_items', 'service', 'total_cost', 'vendor_fee', 'address']
+  def get_phone_number(self, obj):
+    return obj.user.phone_number or obj.user.email
 
 
 
