@@ -43,6 +43,7 @@ class Order(models.Model):
   uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
   user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
   service_provider=models.ForeignKey(LaundrymartStore, on_delete=models.CASCADE, related_name='received_orders', blank=True, null=True)
+
   # Addresses (stored as JSON strings to match Uber format – you can change later if needed)
   pickup_address = models.TextField(blank=True, null=True)
   dropoff_address = models.TextField(blank=True, null=True)
@@ -52,6 +53,7 @@ class Order(models.Model):
   dropoff_latitude=models.FloatField(blank=True, null=True)
   dropoff_longitude=models.FloatField(blank=True, null=True)
 
+  customer_note = models.TextField(blank=True, null=True)
   # Uber tracking
   uber_pickup_quote_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
   uber_pickup_delivery_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)

@@ -50,6 +50,7 @@ def save_delivery_quote(*, user, service_type, serializer_data, uber_data):
     service_type=service_type,
     quote_id=uber_data["id"],
     customer=user,
+    customer_note=serializer_data.get("customer_note"),
     pickup_address=serializer_data.get("pickup_address"),
     dropoff_address=serializer_data.get("dropoff_address"),
     pickup_latitude=serializer_data.get("pickup_latitude"),

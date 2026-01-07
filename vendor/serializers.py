@@ -64,9 +64,14 @@ class DashboardSerializer(serializers.Serializer):
 class DashboardOrderSerializer(serializers.ModelSerializer):
   user = serializers.StringRelatedField()
   price=serializers.SerializerMethodField()
+  status=serializers.SerializerMethodField()
   class Meta:
     model = Order
     fields = ['id','uuid', 'user', 'status', 'weight_in_pounds','price', 'created_at']
+
+  def get_status(self, obj):
+    return obj.get_status_display()
+
   def get_price(self, obj):
     associated_laundrymart = self.context.get('associated_laundrymart')
     store_fee = associated_laundrymart.price_per_pound

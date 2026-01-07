@@ -22,6 +22,7 @@ class DeliveryQuote(models.Model):
   status=models.CharField(max_length=50, blank=True, null=True, choices=STATUS_CHOICES, default='pending')
   quote_id = models.CharField(blank=True, null=True,unique=True, max_length=255)
   customer=models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_quotes')
+  customer_note = models.TextField(blank=True, null=True)
   pickup_address=models.TextField(blank=True, null=True)
   dropoff_address=models.TextField(blank=True, null=True)
   pickup_latitude=models.FloatField(blank=True, null=True)

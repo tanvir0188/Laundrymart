@@ -4,6 +4,7 @@ from decimal import Decimal
 import humanize
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -75,6 +76,16 @@ class StandardResultsSetPagination(PageNumberPagination):
 class VendorOrdersListAPIView(APIView):
   permission_classes = [IsStaff]
   pagination_class = StandardResultsSetPagination
+  @extend_schema(
+    parameters=[
+      OpenApiParameter(
+        name='filter',
+        description='Filter orders by status: pending, active, delivered',
+        required=False,
+        type=str
+      )
+    ]
+  )
 
   def get(self, request):
     filter_type = request.query_params.get('filter', 'pending').lower()
@@ -109,12 +120,15 @@ class VendorOrdersListAPIView(APIView):
           "id": None,
           "uuid": None,  # no UUID for quotes
           "order_id": None,  # frontend uses this as identifier
-          "phone_number": quote.dropoff_phone_number or quote.pickup_phone_number,
+          "phone_number": quote.customer.phone_number,
+          "email": quote.customer.email,
           "time_ago": time_ago,
+          "customer_note": quote.customer_note,
+          "status": quote.get_status_display(),
           "user": quote.customer.full_name or quote.customer.phone_number or quote.customer.email,
           # "service_provider": store.laundrymart_name or user.full_name,  # if needed
           "manifest_items": ManifestItemSerializer(quote.manifest_items.all(), many=True).data,
-          "service": quote.service_type or "full_service",
+          "service": quote.get_service_type_display(),
           "total_cost": None,
           "vendor_fee": quote.fee / Decimal('100') if quote.fee else None,
           "address": quote.dropoff_address or quote.pickup_address,
@@ -150,7 +164,10 @@ class VendorOrdersListAPIView(APIView):
           "uuid": str(order.uuid),
           "order_id": str(order.uuid),  # consistent with frontend expectation
           "phone_number": order.user.phone_number or order.user.email,
+          "customer_note": order.customer_note,
+          "email": order.user.email,
           "time_ago": time_ago,
+          "status": order.get_status_display(),
           "user": str(order.user),  # or order.user.full_name / email if you prefer
           # "service_provider": store.laundrymart_name,
           "manifest_items": ManifestItemSerializer(order.manifest_items.all(), many=True).data,

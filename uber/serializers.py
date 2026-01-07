@@ -13,12 +13,14 @@ class UberCreateQuoteSerializer(serializers.Serializer):
   dropoff_latitude = serializers.FloatField(required=False)
   dropoff_longitude = serializers.FloatField(required=False)
 
+  customer_note = serializers.CharField(required=False)
+
   pickup_phone_number = serializers.RegexField(r'^\+[0-9]+$')
   dropoff_phone_number = serializers.RegexField(r'^\+[0-9]+$')
 
   manifest_total_value = serializers.IntegerField(min_value=0)
 
-  external_store_id = serializers.CharField(required=False, allow_blank=True)
+  external_store_id = serializers.CharField(required=True, allow_blank=True)
 
   def to_uber_payload(self, destination=None):
 
@@ -122,7 +124,8 @@ class ManifestItemSerializer(serializers.Serializer):
   name = serializers.CharField()
   quantity = serializers.IntegerField()
   size = serializers.CharField(required=False)
-  dimensions = DimensionsSerializer()
+  #dimensions = DimensionsSerializer()
+  dimensions = serializers.JSONField()
   price = serializers.IntegerField()
   weight = serializers.IntegerField()
   vat_percentage = serializers.IntegerField(required=False, default=0)
