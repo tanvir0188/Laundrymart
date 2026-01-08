@@ -13,7 +13,7 @@ def create_pending_stripe_order(user, metadata):
     metadata=metadata
   )
   return pending_order
-def create_stripe_customer(user):
+def create_or_get_stripe_customer(user):
   """Create Stripe Customer if not exists in User model"""
   # Check if user already has a Stripe customer ID
   if not user.stripe_customer_id:

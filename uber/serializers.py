@@ -2,6 +2,28 @@ from rest_framework import serializers
 
 from uber.models import DELIVERABLE_ACTION_CHOICES, Delivery, DeliveryQuote, ManifestItem, SERVICE_TYPE_CHOICE
 
+class DimensionsSerializer(serializers.Serializer):
+  length = serializers.IntegerField()
+  height = serializers.IntegerField()
+  depth = serializers.IntegerField()
+
+  def validate(self, attrs):
+    for key, value in attrs.items():
+      if value <= 0:
+        raise serializers.ValidationError(
+          f"{key} must be a positive integer"
+        )
+    return attrs
+
+class ManifestItemSerializer(serializers.Serializer):
+  name = serializers.CharField()
+  quantity = serializers.IntegerField()
+  size = serializers.CharField(required=False)
+  dimensions = DimensionsSerializer()
+  #dimensions = serializers.JSONField()
+  price = serializers.IntegerField()
+  weight = serializers.IntegerField()
+  vat_percentage = serializers.IntegerField(required=False, default=0)
 
 class UberCreateQuoteSerializer(serializers.Serializer):
   service_type=serializers.ChoiceField(required=True,choices=SERVICE_TYPE_CHOICE)
@@ -17,10 +39,11 @@ class UberCreateQuoteSerializer(serializers.Serializer):
 
   pickup_phone_number = serializers.RegexField(r'^\+[0-9]+$')
   dropoff_phone_number = serializers.RegexField(r'^\+[0-9]+$')
+  pickup_ready_dt= serializers.DateTimeField(required=False)
 
   manifest_total_value = serializers.IntegerField(min_value=0)
 
-  external_store_id = serializers.CharField(required=True, allow_blank=True)
+  external_store_id = serializers.CharField()
 
   def to_uber_payload(self, destination=None):
 
@@ -78,13 +101,15 @@ class UberCreateQuoteSerializer(serializers.Serializer):
     return payload
 
 class DeliveryQuoteCreateSerializer(serializers.ModelSerializer):
+  manifest_items = ManifestItemSerializer(many=True)
   class Meta:
     model = DeliveryQuote
-    fields = ["service_type","quote_id","customer","pickup_address","dropoff_address","pickup_latitude",
+    fields = ["service_type","status","quote_id","customer","manifest_items","pickup_address","dropoff_address","pickup_latitude",
               "pickup_longitude","dropoff_latitude","dropoff_longitude","pickup_phone_number",
               "dropoff_phone_number", "manifest_total_value","external_store_id","fee",
-              "currency","currency_type","dropoff_eta","duration","pickup_duration","dropoff_deadline",
+              "currency","currency_type","pickup_ready_dt","dropoff_eta","duration","pickup_duration","dropoff_deadline",
               "expires"]
+    read_only_fields = ["customer","currency", "currency_type", "expires", "pickup_duration", "dropoff_deadline"]
 
 class UberCreateDeliveryPayloadSerializer(serializers.Serializer):
   quote_id = serializers.CharField()
@@ -106,30 +131,6 @@ class UberCreateDeliveryPayloadSerializer(serializers.Serializer):
 
   tip = serializers.IntegerField(min_value=0, required=False)
   idempotency_key = serializers.CharField()
-
-class DimensionsSerializer(serializers.Serializer):
-  length = serializers.IntegerField()
-  height = serializers.IntegerField()
-  depth = serializers.IntegerField()
-
-  def validate(self, attrs):
-    for key, value in attrs.items():
-      if value <= 0:
-        raise serializers.ValidationError(
-          f"{key} must be a positive integer"
-        )
-    return attrs
-
-class ManifestItemSerializer(serializers.Serializer):
-  name = serializers.CharField()
-  quantity = serializers.IntegerField()
-  size = serializers.CharField(required=False)
-  #dimensions = DimensionsSerializer()
-  dimensions = serializers.JSONField()
-  price = serializers.IntegerField()
-  weight = serializers.IntegerField()
-  vat_percentage = serializers.IntegerField(required=False, default=0)
-
 
 class CreateDeliverySerializer(serializers.Serializer):
   pickup_name = serializers.CharField()

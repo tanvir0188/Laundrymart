@@ -59,7 +59,7 @@ def create_manifest_for_quote():
         vat_percentage=D('8.875'),
         dimensions={
             "length": random.randint(30, 60),
-            "width": random.randint(20, 40),
+            "depth": random.randint(20, 40),
             "height": random.randint(20, 50)
         }
     )
@@ -91,7 +91,7 @@ def create_manifest_for_order():
         vat_percentage=D('8.875'),
         dimensions={
             "length": random.randint(30, 70),
-            "width": random.randint(20, 50),
+            "depth": random.randint(20, 50),
             "height": random.randint(20, 60)
         }
     )
@@ -115,7 +115,7 @@ def create_manifest_for_delivery():
         vat_percentage=D('0'),
         dimensions={
             "length": random.randint(40, 70),
-            "width": random.randint(30, 50),
+            "depth": random.randint(30, 50),
             "height": random.randint(30, 60)
         }
     )

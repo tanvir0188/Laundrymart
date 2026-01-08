@@ -12,14 +12,14 @@ SERVICE_TYPE_CHOICE=[
   ('full_service', 'Full service')
 ]
 STATUS_CHOICES=[
+  ('card_authorization', 'Card Authorization'),
   ('pending', 'Pending'),
   ('accepted', 'Accepted'),
   ('rejected', 'Rejected'),
 ]
 class DeliveryQuote(models.Model):
-  scheduled_pickup_time=models.DateTimeField(blank=True, null=True)
   service_type=models.CharField(max_length=50, blank=True, null=True, choices=SERVICE_TYPE_CHOICE)
-  status=models.CharField(max_length=50, blank=True, null=True, choices=STATUS_CHOICES, default='pending')
+  status=models.CharField(max_length=50, blank=True, null=True, choices=STATUS_CHOICES, default='card_authorization')
   quote_id = models.CharField(blank=True, null=True,unique=True, max_length=255)
   customer=models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_quotes')
   customer_note = models.TextField(blank=True, null=True)
@@ -36,12 +36,14 @@ class DeliveryQuote(models.Model):
 
 
   fee=models.DecimalField(blank=True, null=True, max_digits=10, decimal_places=2)
-  currency=models.CharField(max_length=20, blank=True, null=True)
-  currency_type=models.CharField(max_length=20, blank=True, null=True)
+  currency=models.CharField(max_length=20, blank=True, null=True, default='usd')
+  currency_type=models.CharField(max_length=20, blank=True, null=True, default='USD')
   dropoff_eta=models.DateTimeField(blank=True, null=True)
 
   duration = models.PositiveIntegerField( blank=True, null=True, help_text="Estimated total duration in minutes")
   pickup_duration = models.PositiveIntegerField(blank=True, null=True,help_text="Estimated pickup duration in minutes")
+
+  pickup_ready_dt = models.DateTimeField(blank=True, null=True)
 
   dropoff_deadline = models.DateTimeField(blank=True, null=True)
 

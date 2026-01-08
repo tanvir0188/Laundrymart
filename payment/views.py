@@ -19,7 +19,9 @@ from laundrymart.permissions import IsCustomer
 from laundrymart.settings import STRIPE_WEBHOOK_SECRET
 from payment.models import Order, PendingStripeOrder
 from payment.serializers import ConfirmOrderSerializer
-from payment.utils import create_pending_stripe_order, create_stripe_customer
+from payment.utils import create_or_get_stripe_customer, create_pending_stripe_order
+from uber.models import DeliveryQuote
+from uber.serializers import DeliveryQuoteCreateSerializer, UberCreateQuoteSerializer
 from uber.utils import create_and_save_delivery, save_delivery_quote
 
 
@@ -33,127 +35,107 @@ def stripe_cancel(request):
 class ConfirmOrderAPIView(APIView):
   permission_classes = [IsCustomer]
   @extend_schema(
-    request=ConfirmOrderSerializer
+    request=DeliveryQuoteCreateSerializer
   )
   def post(self, request):
-    serializer = ConfirmOrderSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    data = serializer.validated_data
-    service_type = data["service_type"]
+    with transaction.atomic():
+      serializer = DeliveryQuoteCreateSerializer(data=request.data)
+      serializer.is_valid(raise_exception=True)
 
-    # Ensure Stripe customer exists (create if needed)
-    stripe_customer_result = create_stripe_customer(request.user)
-    if not stripe_customer_result:
-      return Response({"error": "Failed to initialize payment customer"}, status=500)
+      service_type = serializer.validated_data.get("service_type")
 
-    stripe_customer_id = stripe_customer_result['customer_id']
+      # Ensure Stripe customer exists (create if needed)
+      stripe_customer_result = create_or_get_stripe_customer(request.user)
+      if not stripe_customer_result:
+        return Response({"error": "Failed to initialize payment customer"}, status=500)
 
-    # Check if user already has saved cards
-    try:
-      payment_methods = stripe.PaymentMethod.list(
-        customer=stripe_customer_id,
-        type="card",
-      )
-      has_saved_cards = len(payment_methods.data) > 0
-    except Exception as e:
-      return Response({"error": f"Failed to check saved cards: {str(e)}"}, status=500)
+      stripe_customer_id = stripe_customer_result['customer_id']
 
-    if has_saved_cards:
-      # User has saved cards → provide list and a SetupIntent client_secret for in-app card addition (optional)
-      cards = []
-      for pm in payment_methods.data:
-        cards.append({
-          'id': pm.id,
-          'brand': pm.card.brand.capitalize(),
-          'last4': pm.card.last4,
-          'exp_month': pm.card.exp_month,
-          'exp_year': pm.card.exp_year,
-        })
-
-      # Create a reusable SetupIntent for potential new card addition without redirecting to hosted page
+      # Retrieve attached payment methods (optimized: single API call)
       try:
-        setup_intent = stripe.SetupIntent.create(
+        payment_methods = stripe.PaymentMethod.list(
           customer=stripe_customer_id,
-          payment_method_types=["card"],
-          usage="off_session",  # since we will charge later
+          type="card",
+          limit=100,
         )
+        has_saved_cards = len(payment_methods.data) > 0
       except Exception as e:
-        return Response({"error": f"Failed to create SetupIntent: {str(e)}"}, status=500)
+        return Response({"error": f"Failed to retrieve payment methods: {str(e)}"}, status=500)
 
-      return Response({
-        "requires_card_save": False,
-        "has_saved_cards": True,
-        "cards": cards,
-        "setup_intent_client_secret": setup_intent.client_secret,  # frontend can use this to add new card if user wants
-        "message": "You have saved cards. Proceed to payment confirmation with selected card."
-      }, status=status.HTTP_200_OK)
+      # Create the pending DeliveryQuote using serializer.save()
+      # We inject required fields that are not in request.data: customer and default status
+      pending_quote = serializer.save(customer=request.user)
 
-    else:
-      # No saved cards → redirect to Stripe Checkout (setup mode) to save the first card
-      protocol = "https" if request.is_secure() else "http"
+      if has_saved_cards:
+        # Build cards list
+        cards = []
+        for pm in payment_methods.data:
+          cards.append({
+            'id': pm.id,
+            'brand': pm.card.brand.capitalize(),
+            'last4': pm.card.last4,
+            'exp_month': pm.card.exp_month,
+            'exp_year': pm.card.exp_year,
+          })
 
-      success_url = (
-        f"{protocol}://{request.get_host()}"
-        f"{reverse('stripe_success')}?session_id={{CHECKOUT_SESSION_ID}}"
-      )
+        # Optional: Create SetupIntent to allow adding a new card
+        try:
+          setup_intent = stripe.SetupIntent.create(
+            customer=stripe_customer_id,
+            payment_method_types=["card"],
+            usage="off_session",
+          )
+        except Exception as e:
+          return Response({"error": f"Failed to create SetupIntent: {str(e)}"}, status=500)
 
-      cancel_url = (
-        f"{protocol}://{request.get_host()}"
-        f"{reverse('stripe_cancel')}"
-      )
+        return Response({
+          "requires_card_validation": False,
+          "has_saved_cards": True,
+          "cards": cards,
+          "setup_intent_client_secret": setup_intent.client_secret,
+          "pending_quote_id": str(pending_quote.id),
+          "message": "You have saved payment methods. Select one to proceed with creating the delivery quote."
+        }, status=status.HTTP_200_OK)
 
-      try:
-        order_payload_dict = {
-          "pickup_address": data["pickup_address"],
-          "dropoff_address": data["dropoff_address"],
-          "pickup_latitude": data["pickup_latitude"],
-          "pickup_longitude": data["pickup_longitude"],
-          "dropoff_latitude": data["dropoff_latitude"],
-          "dropoff_longitude": data["dropoff_longitude"],
-          "pickup_phone_number": data["pickup_phone_number"],
-          "dropoff_phone_number": data["dropoff_phone_number"],
-          "pickup_name": data.get("pickup_name"),
-          "dropoff_name": data.get("dropoff_name"),
-          "manifest_items": data.get("manifest_items", []),
-          "manifest_total_value": data.get("manifest_total_value"),
-          "external_store_id": data.get("external_store_id"),
-          "external_id": data.get("external_id"),
-          "deliverable_action": data.get("deliverable_action"),
-        }
-        metadata_payload = {
-          "user_id": str(request.user.id),
-          "service_type": service_type,
-          "quote_id": data["quote_id"],
-          "return_quote_id": data.get("return_quote_id", ""),
-          "order_payload": json.dumps(order_payload_dict),
-        }
-
-        # Create Stripe Checkout Session FIRST
-        session = stripe.checkout.Session.create(
-          mode="setup",
-          customer=stripe_customer_id,
-          payment_method_types=["card"],
-          success_url=success_url,
-          cancel_url=cancel_url,
-          metadata={},  # We'll add pending_order_id after creating the record
+      else:
+        # No saved cards → force setup via Checkout
+        protocol = "https" if request.is_secure() else "http"
+        success_url = (
+          f"{protocol}://{request.get_host()}"
+          f"{reverse('stripe_success')}?session_id={{CHECKOUT_SESSION_ID}}"
+        )
+        cancel_url = (
+          f"{protocol}://{request.get_host()}"
+          f"{reverse('stripe_cancel')}"
         )
 
-        # ONLY if session creation succeeds → create PendingStripeOrder
-        pending_order = create_pending_stripe_order(request.user, metadata_payload)
+        try:
+          session = stripe.checkout.Session.create(
+            mode="setup",
+            customer=stripe_customer_id,
+            payment_method_types=["card"],
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={},
+          )
 
-        stripe.checkout.Session.modify(
-          session.id,
-          metadata={'pending_order_id': str(pending_order.id)},
-        )
-      except Exception as e:
-        return Response({"error": f"Stripe setup failed: {str(e)}"}, status=500)
+          # Attach pending_quote_id to session metadata
+          stripe.checkout.Session.modify(
+            session.id,
+            metadata={'pending_quote_id': str(pending_quote.id)},
+          )
 
-      return Response({
-        "requires_card_save": True,
-        "message": "Redirect to Stripe to save your card.",
-        "checkout_url": session.url,
-        "checkout_session_id": session.id,
-      }, status=status.HTTP_200_OK)
+        except Exception as e:
+          # Clean up on failure and rollback the database changes
+          pending_quote.delete()
+          return Response({"error": f"Failed to create Stripe Checkout session: {str(e)}"}, status=500)
+
+        return Response({
+          "requires_card_validation": True,
+          "message": "Please add and validate a payment card to continue.",
+          "checkout_url": session.url,
+          "checkout_session_id": session.id,
+        }, status=status.HTTP_200_OK)
 
 
 # @csrf_exempt

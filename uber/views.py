@@ -57,6 +57,7 @@ class UberCreateQuoteAPIView(APIView):
         "dropoff_longitude":serializer.validated_data["dropoff_longitude"],
         "pickup_phone_number":serializer.validated_data["pickup_phone_number"],
         "dropoff_phone_number":serializer.validated_data["dropoff_phone_number"],
+        "pickup_ready_dt": serializer.validated_data.get("pickup_ready_dt"),
 
 
         "quote_id": uber_data["id"],
@@ -82,6 +83,7 @@ class UberCreateQuoteAPIView(APIView):
         "dropoff_longitude": serializer.validated_data["dropoff_longitude"],
         "pickup_phone_number": serializer.validated_data["pickup_phone_number"],
         "dropoff_phone_number": serializer.validated_data["dropoff_phone_number"],
+        "pickup_ready_dt": serializer.validated_data.get("pickup_ready_dt"),
 
         "quote_id": uber_data["id"],
         "fee": uber_data["fee"],
@@ -111,6 +113,8 @@ class UberCreateQuoteAPIView(APIView):
         "dropoff_longitude": serializer.validated_data["dropoff_longitude"],
         "pickup_phone_number": serializer.validated_data["pickup_phone_number"],
         "dropoff_phone_number": serializer.validated_data["dropoff_phone_number"],
+        "pickup_ready_dt": serializer.validated_data.get("pickup_ready_dt"),
+
         "first_quote": full_service_result["first_quote"],
         "second_quote": full_service_result["second_quote"],
         "combined_fee": full_service_result["combined_fee"]

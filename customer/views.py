@@ -2,15 +2,10 @@ from decimal import Decimal
 
 import humanize
 from django.db.models import Avg, Case, FloatField, IntegerField, Value, When
-from django.db.models.expressions import RawSQL
+
 from django.db.models.functions import Coalesce
-from django.shortcuts import render
-from django.template.context_processors import request
 from django.utils import timezone
-from django_filters import CharFilter, ChoiceFilter, FilterSet, NumberFilter
-from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.contrib import django_filters
-from drf_spectacular.types import OpenApiTypes
+
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import ValidationError

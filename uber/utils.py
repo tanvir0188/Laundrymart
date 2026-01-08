@@ -3,7 +3,6 @@ import requests
 from laundrymart.settings import UBER_CUSTOMER_ID
 from uber.cache_access_token import UBER_BASE_URL, uber_headers
 from uber.models import Delivery, DeliveryQuote, ManifestItem
-from uber.serializers import DeliveryQuoteCreateSerializer
 
 
 def create_dropoff_quote(customer_id, payload):
