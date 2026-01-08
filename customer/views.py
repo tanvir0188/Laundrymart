@@ -26,8 +26,9 @@ from common_utils.distance_utils import calculate_distance_miles, calculate_dist
 from customer.serializers import CustomerOrderReportSerializer, ReviewSerializer, VendorSerializer
 from laundrymart.permissions import IsCustomer
 from payment.models import Order
-from uber.models import DeliveryQuote
+from uber.models import Delivery, DeliveryQuote
 from uber.serializers import ManifestItemSerializer
+from vendor.serializers import VendorOrderReportSerializer
 from vendor.views import StandardResultsSetPagination
 
 
@@ -256,19 +257,13 @@ class CustomerOrdersListAPIView(APIView):
 
     user = request.user
 
-    try:
-
-      store = user.laundrymart_store
-      external_store_id = store.store_id
-    except AttributeError:
-      return Response({"error": "Laundrymart store not linked to this user"}, status=400)
 
     # We'll collect unified results with a creation timestamp for sorting
     results = []
 
     if filter_type == 'pending':
       quotes_qs = DeliveryQuote.objects.filter(
-        external_store_id=external_store_id,
+        customer=user,
         status='pending'
       ).select_related('customer').prefetch_related('manifest_items').order_by('-saved_at')
 
@@ -290,6 +285,11 @@ class CustomerOrdersListAPIView(APIView):
           "customer_note": quote.customer_note,
           "status": quote.get_status_display(),
           "user": quote.customer.full_name or quote.customer.phone_number or quote.customer.email,
+          "vendor_report": VendorOrderReportSerializer(quote.vendor_filed_report,context={'request': request}).data if hasattr(quote,
+                                                                                                     'vendor_filed_report') else None,
+          "customer_report": CustomerOrderReportSerializer(quote.customer_filed_report,
+                                                           context={'request': request}).data if hasattr(quote,
+                                                                                                         'customer_filed_report') else None,
           # "service_provider": store.laundrymart_name or user.full_name,  # if needed
           "manifest_items": ManifestItemSerializer(quote.manifest_items.all(), many=True).data,
           "service": quote.get_service_type_display(),
@@ -302,7 +302,7 @@ class CustomerOrdersListAPIView(APIView):
           "created_at": quote.saved_at.isoformat(),
         })
 
-    elif filter_type in ['active', 'delivered']:
+    elif filter_type in ['active', 'completed']:
       status_list = (
         ['card_saved', 'picked_up', 'weighed', 'charged', 'return_scheduled']
         if filter_type == 'active'
@@ -310,7 +310,7 @@ class CustomerOrdersListAPIView(APIView):
       )
 
       orders_qs = Order.objects.filter(
-        service_provider=store,
+        user=user,
         status__in=status_list
       ).select_related('user', 'service_provider').prefetch_related('manifest_items') \
         .order_by('-created_at')
@@ -323,6 +323,8 @@ class CustomerOrdersListAPIView(APIView):
       for order in page:
         time_ago = humanize.naturaltime(timezone.now() - order.created_at)
 
+        tracking_url = None
+
         results.append({
           "id": order.id,
           "uuid": str(order.uuid),
@@ -334,6 +336,7 @@ class CustomerOrdersListAPIView(APIView):
           "status": order.get_status_display(),
           "user": str(order.user),  # or order.user.full_name / email if you prefer
           # "service_provider": store.laundrymart_name,
+          "tracking_url": None,
           "manifest_items": ManifestItemSerializer(order.manifest_items.all(), many=True).data,
           "service": "full_service",  # or add a field later if needed
           "total_cost": order.final_total_cents / Decimal('100') if order.final_total_cents else None,
