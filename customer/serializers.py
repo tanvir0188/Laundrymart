@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 
 from accounts.models import LaundrymartStore, Service, User
 from common_utils.distance_utils import calculate_distance_miles, get_best_location
@@ -66,19 +67,57 @@ class OrderReportImageSerializer(serializers.ModelSerializer):
     fields = ['image']  # Only the image field is needed for the upload
 
 class CustomerOrderReportSerializer(serializers.ModelSerializer):
-  images = OrderReportImageSerializer(many=True)  # Handle multiple images
+  images = serializers.SerializerMethodField()
 
   class Meta:
     model = OrderReport
-    fields = ['id', 'laundrymart', 'delivery_quote', 'order', 'issue_description', 'created_at', 'images']
+    fields = ['id', 'user', 'delivery_quote', 'order', 'issue_description', 'created_at', 'images']
+
+  def get_images(self, obj):
+    # Get the request from the context
+    request = self.context.get('request')
+    if not request:
+      raise ValidationError("Request context is missing, can't generate image URLs.")
+
+    # Fetch images related to the report
+    images = OrderReportImage.objects.filter(report=obj).values_list('image', flat=True)
+
+    # Construct the full URL for each image using the request's host and scheme (HTTP/HTTPS)
+    image_urls = [
+      request.build_absolute_uri(image)  # Builds the full URL using the request object
+      for image in images
+    ]
+    return image_urls
+
 
   def create(self, validated_data):
-    # Separate the images data from the other validated data
-    images_data = validated_data.pop('images', [])
+    request = self.context['request']
+
+    # Manually reconstruct the images data from form-data
+    images_data = []
+    i = 0
+    while True:
+      image_key = f'images[{i}]'  # Example format for image keys in form data
+
+      if image_key not in request.FILES:
+        break
+
+      image_item = {
+        'image': request.FILES[image_key],  # Fetch the image from request.FILES
+      }
+
+      images_data.append(image_item)
+      i += 1
+
+    print("Reconstructed images_data:", images_data)
+
+    # IMPORTANT: Remove 'images' from validated_data to prevent setter error
+    validated_data.pop('images', None)
 
     # Create the OrderReport instance
     order_report = OrderReport.objects.create(**validated_data)
 
+    # Now associate the images with the OrderReport
     for image_data in images_data:
       OrderReportImage.objects.create(report=order_report, **image_data)
 

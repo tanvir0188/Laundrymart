@@ -353,9 +353,13 @@ class CustomerOrdersListAPIView(APIView):
       "filter": filter_type,
     })
 
-class VendorOrderReportAPIView(APIView):
+class CustomerOrderReportAPIView(APIView):
   permission_classes = [IsCustomer]  # Ensure the user is authenticated and a staff member
 
+  @extend_schema(
+    request=CustomerOrderReportSerializer,
+    responses={201: CustomerOrderReportSerializer, 400: 'Validation Error'}
+  )
   def post(self, request):
     try:
       # Extract the data from the request

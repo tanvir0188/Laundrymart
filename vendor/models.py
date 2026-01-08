@@ -7,9 +7,9 @@ from uber.models import DeliveryQuote
 
 # Create your models here.
 class OrderReport(models.Model):
-  laundrymart = models.ForeignKey(LaundrymartStore, on_delete=models.CASCADE,null=True, blank=True, related_name='filed_reports')
-  delivery_quote=models.OneToOneField(DeliveryQuote, on_delete=models.CASCADE, null=True, blank=True,related_name='filed_report')
-  order=models.OneToOneField(Order, on_delete=models.CASCADE, related_name='filed_report')
+  laundrymart = models.ForeignKey(LaundrymartStore, on_delete=models.CASCADE,null=True, blank=True, related_name='vendor_filed_reports')
+  delivery_quote=models.OneToOneField(DeliveryQuote, on_delete=models.CASCADE, null=True, blank=True,related_name='vendor_filed_report')
+  order=models.OneToOneField(Order, on_delete=models.CASCADE, related_name='vendor_filed_report')
   issue_description = models.TextField()
 
   created_at = models.DateTimeField(auto_now_add=True)

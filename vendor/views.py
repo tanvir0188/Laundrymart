@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from customer.serializers import CustomerOrderReportSerializer
 from laundrymart.permissions import IsStaff
 from payment.models import Order
 from uber.models import DeliveryQuote
@@ -128,6 +129,9 @@ class VendorOrdersListAPIView(APIView):
           "time_ago": time_ago,
           "customer_note": quote.customer_note,
           "status": quote.get_status_display(),
+          "vendor_report":VendorOrderReportSerializer(quote.vendor_filed_report, context={'request':request}).data if hasattr(quote, 'vendor_filed_report') else None,
+          "customer_report":CustomerOrderReportSerializer(quote.customer_filed_report, context={'request':request}).data if hasattr(quote, 'customer_filed_report') else None,
+
           "user": quote.customer.full_name or quote.customer.phone_number or quote.customer.email,
           # "service_provider": store.laundrymart_name or user.full_name,  # if needed
           "manifest_items": ManifestItemSerializer(quote.manifest_items.all(), many=True).data,
@@ -136,7 +140,8 @@ class VendorOrdersListAPIView(APIView):
           "vendor_fee": quote.fee / Decimal('100') if quote.fee else None,
           "address": quote.dropoff_address or quote.pickup_address,
           "is_quote": True,
-          "quote_id": quote.quote_id,
+          "uber_quote_id": quote.quote_id,
+          "quote_id":quote.id,
           "expires": quote.expires.isoformat() if quote.expires else None,
           "created_at": quote.saved_at.isoformat(),
         })
@@ -172,13 +177,16 @@ class VendorOrdersListAPIView(APIView):
           "time_ago": time_ago,
           "status": order.get_status_display(),
           "user": str(order.user),  # or order.user.full_name / email if you prefer
+          "vendor_report":VendorOrderReportSerializer(order.vendor_filed_report, context={'request':request}).data if hasattr(order, 'vendor_filed_report') else None,
+          "customer_report":CustomerOrderReportSerializer(order.customer_filed_report, context={'request':request}).data if hasattr(order, 'customer_filed_report') else None,
           # "service_provider": store.laundrymart_name,
           "manifest_items": ManifestItemSerializer(order.manifest_items.all(), many=True).data,
-          "service": "full_service",  # or add a field later if needed
+          # "service": order.q,  # or add a field later if needed
           "total_cost": order.final_total_cents / Decimal('100') if order.final_total_cents else None,
           "vendor_fee": order.delivery_fee_cents / Decimal('100') if order.delivery_fee_cents else None,
           "address": order.dropoff_address or order.pickup_address,
           "is_quote": False,
+          "uber_quote_id": None,
           "quote_id": None,
           "expires": None,
           "created_at": order.created_at.isoformat(),

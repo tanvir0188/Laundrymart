@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 
     'accounts.apps.AccountsConfig',
     'customer.apps.CustomerConfig',
+    'vendor.apps.VendorConfig',
     'uber.apps.UberConfig',
     'payment.apps.PaymentConfig',
     'messaging.apps.MessagingConfig',

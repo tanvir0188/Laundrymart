@@ -4,7 +4,7 @@ from accounts.views import SecondaryLocationAPIView, SecondaryLocationModifyAPIV
 from payment.views import ConfirmOrderAPIView
 from uber.views import UberCreateQuoteAPIView
 from . import views
-from .views import ChooseForCustomer
+from .views import ChooseForCustomer, CustomerOrderReportAPIView
 
 urlpatterns = [
   path('vendors', views.VendorAPIView.as_view(), name='vendors'),
@@ -15,5 +15,6 @@ urlpatterns = [
   path('location', SecondaryLocationModifyAPIView.as_view(), name='location'),
   path('choose-for-customer', ChooseForCustomer.as_view(), name='choose-for-customer'),
   path('confirm-order', ConfirmOrderAPIView.as_view(), name='confirm-order'),
+  path('order-report', CustomerOrderReportAPIView.as_view(), name='order-report'),
   #
 ]
