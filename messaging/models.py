@@ -10,7 +10,7 @@ NOTIFICATION_CATEGORY_CHOICES=[
 	('Important', 'Important'),
 	('Promotional', 'Promotional'),
 ]
-class Notification(models.Model):
+class CustomerNotification(models.Model):
 	category = models.CharField(choices=NOTIFICATION_CATEGORY_CHOICES, default='Normal', max_length=255)
 	custom_title=models.CharField(blank=True, null=True, max_length=255)
 	recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")

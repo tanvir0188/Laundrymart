@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from accounts.models import LaundrymartStore, User
 from laundrymart.permissions import IsCustomer
-from laundrymart.settings import STRIPE_WEBHOOK_SECRET
+from laundrymart.settings import CUSTOMER_CONFIRM_ORDER_STRIPE_WEBHOOK_SECRET
 from payment.models import Order, PendingStripeOrder
 from payment.serializers import ConfirmOrderSerializer
 from payment.utils import create_or_get_stripe_customer, create_pending_stripe_order
@@ -231,7 +231,7 @@ def stripe_webhook_confirm_order(request):
     event = stripe.Webhook.construct_event(
       payload,
       sig_header,
-      STRIPE_WEBHOOK_SECRET
+      CUSTOMER_CONFIRM_ORDER_STRIPE_WEBHOOK_SECRET
     )
   except ValueError:
     print("Invalid payload")
@@ -486,7 +486,7 @@ def list_cards_from_stripe(request):
   try:
     # Get or create Stripe customer ID
     if not request.user.stripe_customer_id:
-      customer_id = create_stripe_customer(request.user)
+      customer_id = create_or_get_stripe_customer(request.user)
       if not customer_id:
         return Response({
           'success': False,

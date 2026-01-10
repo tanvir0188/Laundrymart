@@ -6,9 +6,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from laundrymart.permissions import IsCustomer
 from messaging.async_utils import broadcast_message, broadcast_seen_status
-from messaging.models import Message, Room, VendorNotification
-from messaging.serializers import MessageSerializer, RoomSerializer, VendorNotificationSerializer
+from messaging.models import CustomerNotification, Message, Room, VendorNotification
+from messaging.serializers import CustomerNotificationSerializer, MessageSerializer, RoomSerializer, \
+  VendorNotificationSerializer
 
 
 # Create your views here.
@@ -77,39 +79,37 @@ class RoomAPIView(APIView):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class VendorNotificationAPIView(APIView):
-  permission_classes = [IsAuthenticated]
+class CustomerNotificationAPIView(APIView):
+  permission_classes = [IsCustomer]
 
   def get(self, request):
     user = request.user
-    store = user.laundrymart_store
 
-    store.vendor_notifications.filter(seen=False).update(seen=True)
+    user.notifications.filter(seen=False).update(seen=True)
 
-    notifications = store.vendor_notifications.all()
+    notifications = user.notifications.all()
 
-    serializer = VendorNotificationSerializer(notifications, many=True)
+    serializer = CustomerNotificationSerializer(notifications, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
   def delete(self, request):
     user = request.user
-    store = user.laundrymart_store
 
-    store.vendor_notifications.all().delete()
+    user.notifications.all().delete()
 
     return Response({"message": "All notifications deleted."}, status=status.HTTP_200_OK)
 
-class VendorNotificationModifyAPIView(APIView):
+class CustomerNotificationModifyAPIView(APIView):
   permission_classes = [IsAuthenticated]
 
   def patch(self, request, notification_id, action='mark_as_read'):
     user = request.user
-    store = user.laundrymart_store
+
 
     notification = get_object_or_404(
-      VendorNotification,
+      CustomerNotification,
       id=notification_id,
-      recipient=store  # ensures ownership in the same query
+      recipient=user  # ensures ownership in the same query
     )
     if action == "mark_as_read" or action is None:
       notification.is_read = True

@@ -2,9 +2,10 @@ from datetime import timedelta
 from decimal import Decimal
 
 import humanize
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -12,36 +13,128 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import LaundrymartStore
 from customer.serializers import CustomerOrderReportSerializer
 from laundrymart.permissions import IsStaff
 from payment.models import Order
-from uber.models import DeliveryQuote
-from uber.serializers import ManifestItemSerializer
+from uber.models import DeliveryQuote, ManifestItem
+from uber.serializers import CreateDeliverySerializer, ManifestItemSerializer
+from uber.utils import create_and_save_delivery
 from vendor.models import OrderReportImage
 from vendor.serializers import DashboardSerializer, OrderDetailSerializer, VendorOrderReportSerializer
 
 
-class AcceptOrRejectQuoteAPIView(APIView):
-  permission_classes = [IsStaff]
+class AcceptQuoteAPIView(APIView):
+  """
+  Vendor accepts quote → creates Uber delivery + creates main Order + links everything
+  """
+  permission_classes = [IsStaff]  # or custom IsLaundryStoreStaff
+
+  @transaction.atomic
   def patch(self, request, quote_id):
-    user=request.user
-    external_store_id=user.store_id
-    quote=get_object_or_404(DeliveryQuote, pk=quote_id)
-    if external_store_id != quote.external_store_id:
-      return Response({"error": "You do not have permission to modify this quote."}, status=status.HTTP_403_FORBIDDEN)
-    action=request.data.get("action")
-    if action not in ["accept", "reject"]:
-      return Response({"error": "Invalid action. Must be 'accept' or 'reject'."}, status=status.HTTP_400_BAD_REQUEST)
-    if action=="accept":
-      quote.status="accepted"
-      quote.save()
-    elif action=="reject":
-      quote.status="rejected"
-      quote.save()
-    return Response({
-      "quote_id": quote.quote_id,
-      "status": f'You have {quote.status} the quote.'
-    }, status=status.HTTP_200_OK)
+    quote = get_object_or_404(DeliveryQuote, pk=quote_id)
+
+    # Permission check
+    if not hasattr(request.user, 'laundrymart_store') or \
+        str(request.user.laundrymart_store.store_id) != str(quote.external_store_id):
+      return Response({"error": "Unauthorized for this quote"}, status=403)
+
+    if quote.status != 'pending':
+      raise ValidationError(f"Quote must be pending to accept (current: {quote.get_status_display()})")
+
+    try:
+      # 1. Prepare data for CreateDeliverySerializer
+      quote_data = {
+        "quote_id": quote.quote_id,
+        "pickup_name": "Laundry Store",  # ← improve: get from store profile
+        "pickup_address": quote.pickup_address,
+        "pickup_phone_number": quote.pickup_phone_number,
+        "dropoff_name": quote.customer.full_name or "Customer",
+        "dropoff_address": quote.dropoff_address,
+        "dropoff_phone_number": quote.dropoff_phone_number,
+        "pickup_latitude": quote.pickup_latitude,
+        "pickup_longitude": quote.pickup_longitude,
+        "dropoff_latitude": quote.dropoff_latitude,
+        "dropoff_longitude": quote.dropoff_longitude,
+        "deliverable_action": "deliverable_action_meet_at_door",
+        "manifest_items": [],
+        "external_store_id": quote.external_store_id,
+        "manifest_total_value": int(quote.manifest_total_value or 0),
+      }
+
+      # Load manifest items
+      manifest_items_qs = ManifestItem.objects.filter(delivery_quote=quote)
+      quote_data["manifest_items"] = ManifestItemSerializer(
+        manifest_items_qs, many=True
+      ).data
+
+      # Validate with your existing serializer
+      serializer = CreateDeliverySerializer(data=quote_data)
+      serializer.is_valid(raise_exception=True)
+      validated_data = serializer.validated_data
+
+      # 2. Create the Uber pickup delivery
+      is_return_leg = False  # this is always the pickup leg
+      pickup_delivery = create_and_save_delivery(
+        user=quote.customer,
+        validated_data=validated_data,
+        payload=validated_data,
+        is_return_leg=is_return_leg
+      )
+
+      # 3. Transfer manifest items to the new delivery
+      ManifestItem.objects.filter(delivery_quote=quote).update(
+        delivery=pickup_delivery,
+        # delivery_quote=None  # optional - clear if you want strict separation
+      )
+
+      # 4. Create the main Order and link pickup delivery
+      order = Order.objects.create(
+        user=quote.customer,
+        service_provider=LaundrymartStore.objects.get(store_id=quote.external_store_id),  # assuming you have reverse relation or get it
+        pickup_address=quote.pickup_address,
+        dropoff_address=quote.dropoff_address,
+        pickup_latitude=quote.pickup_latitude,
+        pickup_longitude=quote.pickup_longitude,
+        dropoff_latitude=quote.dropoff_latitude,
+        dropoff_longitude=quote.dropoff_longitude,
+        # Link the pickup delivery
+        pickup_delivery=pickup_delivery,
+        # Initial Uber quote/delivery IDs
+        uber_pickup_quote_id=quote.quote_id,
+        uber_pickup_delivery_id=pickup_delivery.delivery_uid,
+        stripe_customer_id = quote.customer.stripe_customer_id,
+        stripe_default_pm_id= None,  # set later during payment method saving
+        # Status progression
+        status='processing',  # or 'card_saved' if you prefer
+        # Optional: copy customer note if exists
+        customer_note=quote.customer_note or "",
+      )
+
+      # 5. Finalize quote
+      quote.status = 'accepted'
+      quote.save(update_fields=['status'])
+
+      return Response({
+        "success": True,
+        "quote_id": quote.quote_id,
+        "order_uuid": str(order.uuid),
+        "order_status": order.status,
+        "pickup_delivery_uid": pickup_delivery.delivery_uid,
+        "tracking_url": pickup_delivery.tracking_url,
+        "fee": pickup_delivery.fee,
+        "message": "Quote accepted → Order created → Pickup delivery scheduled"
+      }, status=status.HTTP_201_CREATED)
+
+    except ValidationError as e:
+      return Response(e.detail, status=400)
+
+    except Exception as e:
+      print(f"Critical error accepting quote {quote_id}")
+      return Response(
+        {"error": "Failed to process acceptance. Please contact support."},
+        status=500
+      )
 
 class DashboardAPIView(APIView):
   permission_classes = [IsStaff]

@@ -12,7 +12,7 @@ SERVICE_TYPE_CHOICE=[
   ('full_service', 'Full service')
 ]
 STATUS_CHOICES=[
-  ('card_authorization', 'Card Authorization'),
+  ('draft', 'Draft'),
   ('pending', 'Pending'),
   ('accepted', 'Accepted'),
   ('rejected', 'Rejected'),
@@ -33,6 +33,7 @@ class DeliveryQuote(models.Model):
   dropoff_phone_number=models.CharField(blank=True, null=True, max_length=50)
   manifest_total_value=models.DecimalField(max_digits=12, decimal_places=2,blank=True, null=True, validators=[MinValueValidator(0)])
   external_store_id=models.CharField(blank=True, null=True, db_index=True)
+  payment_method_id=models.CharField(max_length=255, blank=True, null=True)
 
 
   fee=models.DecimalField(blank=True, null=True, max_digits=10, decimal_places=2)
