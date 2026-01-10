@@ -156,7 +156,8 @@ class SelectPaymentMethodForQuoteAPIView(APIView):
         try:
             quote = DeliveryQuote.objects.select_for_update().get(
                 id=pending_quote_id,
-                customer=request.user
+                customer=request.user,
+                payment_method_id=payment_method_id
             )
 
             # Very important security check: verify this PM belongs to the user

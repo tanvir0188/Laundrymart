@@ -104,9 +104,9 @@ class AcceptQuoteAPIView(APIView):
         uber_pickup_quote_id=quote.quote_id,
         uber_pickup_delivery_id=pickup_delivery.delivery_uid,
         stripe_customer_id = quote.customer.stripe_customer_id,
-        stripe_default_pm_id= None,  # set later during payment method saving
+        stripe_default_pm_id= quote.payment_method_id,  # set later during payment method saving
         # Status progression
-        status='processing',  # or 'card_saved' if you prefer
+        status='card_saved',  # or 'card_saved' if you prefer
         # Optional: copy customer note if exists
         customer_note=quote.customer_note or "",
       )
@@ -234,6 +234,9 @@ class VendorOrdersListAPIView(APIView):
           "address": quote.dropoff_address or quote.pickup_address,
           "is_quote": True,
           "uber_quote_id": quote.quote_id,
+          "estimated_delivery_time": quote.dropoff_eta.isoformat() if quote.dropoff_eta else None,
+          "duration": quote.duration,
+
           "quote_id":quote.id,
           "expires": quote.expires.isoformat() if quote.expires else None,
           "created_at": quote.saved_at.isoformat(),
@@ -289,6 +292,7 @@ class VendorOrdersListAPIView(APIView):
       return Response({"error": "Invalid filter. Use: pending, active, delivered"}, status=400)
 
     return paginator.get_paginated_response({
+      "closes_today":store.closes_at,
       "results": results,
       "filter": filter_type,
     })
