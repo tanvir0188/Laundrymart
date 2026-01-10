@@ -115,6 +115,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
       is_verified=False,
       otp=str(otp),
       otp_expires=otp_expiry,
+      approved_by_admin=False,
       is_staff=False if role == 'Customer' else True,
     )
     user.set_password(password)

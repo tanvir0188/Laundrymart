@@ -74,6 +74,7 @@ class User(AbstractUser):
 
   push_and_email_alerts = models.BooleanField(default=True)
   auto_accept_orders = models.BooleanField(default=False)
+  approved_by_admin=models.BooleanField(default=False)
 
   preference = models.CharField(max_length=50, blank=True, null=True, choices=PREFERENCE_CHOICES, default='Auto-assign another LaundryMart (fastest)')
   stripe_customer_id = models.CharField(max_length=200, blank=True, null=True)

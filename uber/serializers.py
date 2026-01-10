@@ -109,7 +109,7 @@ class DeliveryQuoteCreateSerializer(serializers.ModelSerializer):
               "dropoff_phone_number", "manifest_total_value","external_store_id","fee",
               "currency","currency_type","pickup_ready_dt","dropoff_eta","duration","pickup_duration","dropoff_deadline",
               "expires"]
-    read_only_fields = ["customer","currency", "currency_type", "expires", "pickup_duration", "dropoff_deadline"]
+    read_only_fields = ["customer","status","currency", "currency_type", "expires", "pickup_duration", "dropoff_deadline"]
 
 class UberCreateDeliveryPayloadSerializer(serializers.Serializer):
   quote_id = serializers.CharField()

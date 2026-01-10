@@ -8,13 +8,14 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import User
+from accounts.models import LaundrymartStore, User
 from laundrymart.permissions import IsCustomer
 from laundrymart.settings import STRIPE_WEBHOOK_SECRET
 from payment.models import Order, PendingStripeOrder
@@ -23,6 +24,7 @@ from payment.utils import create_or_get_stripe_customer, create_pending_stripe_o
 from uber.models import DeliveryQuote
 from uber.serializers import DeliveryQuoteCreateSerializer, UberCreateQuoteSerializer
 from uber.utils import create_and_save_delivery, save_delivery_quote
+from vendor_push_notification.utils import vendor_accept_or_reject_notification
 
 
 # Create your views here.
@@ -67,7 +69,6 @@ class ConfirmOrderAPIView(APIView):
       pending_quote = serializer.save(customer=request.user)
 
       if has_saved_cards:
-        # Build cards list
         cards = []
         for pm in payment_methods.data:
           cards.append({
@@ -76,17 +77,16 @@ class ConfirmOrderAPIView(APIView):
             'last4': pm.card.last4,
             'exp_month': pm.card.exp_month,
             'exp_year': pm.card.exp_year,
+            # 'pending_quote': str(pending_quote.id),   ← not needed here
           })
 
-        # Optional: Create SetupIntent to allow adding a new card
-        try:
-          setup_intent = stripe.SetupIntent.create(
-            customer=stripe_customer_id,
-            payment_method_types=["card"],
-            usage="off_session",
-          )
-        except Exception as e:
-          return Response({"error": f"Failed to create SetupIntent: {str(e)}"}, status=500)
+        return Response({
+          "requires_card_validation": False,
+          "has_saved_cards": True,
+          "cards": cards,
+          "pending_quote_id": str(pending_quote.id),
+          "message": "Select a saved card to continue",
+        }, status=status.HTTP_200_OK)
 
         return Response({
           "requires_card_validation": False,
@@ -118,8 +118,6 @@ class ConfirmOrderAPIView(APIView):
             cancel_url=cancel_url,
             metadata={},
           )
-
-          # Attach pending_quote_id to session metadata
           stripe.checkout.Session.modify(
             session.id,
             metadata={'pending_quote_id': str(pending_quote.id)},
@@ -137,6 +135,160 @@ class ConfirmOrderAPIView(APIView):
           "checkout_session_id": session.id,
         }, status=status.HTTP_200_OK)
 
+# orders/views.py or similar
+class SelectPaymentMethodForQuoteAPIView(APIView):
+    """
+    User selected existing saved card for this delivery quote
+    """
+    permission_classes = [IsCustomer]
+
+    @transaction.atomic
+    def post(self, request):
+        pending_quote_id = request.data.get('pending_quote_id')
+        payment_method_id = request.data.get('payment_method_id')
+
+        if not pending_quote_id or not payment_method_id:
+            return Response(
+                {"error": "Both pending_quote_id and payment_method_id are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            quote = DeliveryQuote.objects.select_for_update().get(
+                id=pending_quote_id,
+                customer=request.user
+            )
+
+            # Very important security check: verify this PM belongs to the user
+            pm = stripe.PaymentMethod.retrieve(payment_method_id)
+            if pm.customer != request.user.stripe_customer_id:
+                return Response(
+                    {"error": "This payment method does not belong to you"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # Optional but recommended: confirm it can be used off-session
+            # (most already-attached cards are already confirmed, but we can be extra safe)
+
+            stripe.SetupIntent.create(
+                customer=request.user.stripe_customer_id,
+                payment_method=payment_method_id,
+                confirm=True,
+                usage='off_session',
+            )
+
+            # Now the quote is ready for vendor
+            quote.status = 'pending'
+            quote.save(update_fields=['status'])
+
+            # Notify vendor
+            if quote.external_store_id:
+                try:
+                    store = LaundrymartStore.objects.get(id=quote.external_store_id)
+                    vendor_accept_or_reject_notification(quote, store)
+                    print(
+                        f"Vendor notified - existing card selected | "
+                        f"Quote: {quote.quote_id} → pending"
+                    )
+                except LaundrymartStore.DoesNotExist:
+                    print(f"Store not found for quote {quote.quote_id}")
+
+            return Response({
+                "success": True,
+                "message": "Payment method selected. Quote is now pending vendor approval.",
+                "quote_status": quote.status
+            }, status=status.HTTP_200_OK)
+
+        except DeliveryQuote.DoesNotExist:
+            return Response(
+                {"error": "Quote not found or doesn't belong to you"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except stripe.error.StripeError as e:
+            print(f"Stripe error while confirming PM: {str(e)}")
+            return Response(
+                {"error": "Payment method confirmation failed. Please try another card."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            print("Unexpected error in select payment method")
+            return Response(
+                {"error": "Something went wrong. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+@require_POST
+@csrf_exempt
+@transaction.atomic
+def stripe_webhook_confirm_order(request):
+  """
+  Stripe webhook - handles successful card setup (checkout.session.completed mode=setup)
+  Updates DeliveryQuote to 'pending' and notifies vendor
+  """
+  payload = request.body
+  sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
+
+  try:
+    event = stripe.Webhook.construct_event(
+      payload,
+      sig_header,
+      STRIPE_WEBHOOK_SECRET
+    )
+  except ValueError:
+    print("Invalid payload")
+    return HttpResponse(status=400)
+  except stripe.error.SignatureVerificationError:
+    print("Webhook signature verification failed")
+    return HttpResponse(status=400)
+
+  if event["type"] == "checkout.session.completed":
+    session = event["data"]["object"]
+
+    if session.get("mode") != "setup":
+      return HttpResponse(status=200)
+
+    pending_quote_id = session.metadata.get("pending_quote_id")
+    if not pending_quote_id:
+      print("No pending_quote_id in session metadata")
+      return HttpResponse(status=200)
+
+    try:
+      # Lock the quote row to prevent concurrent modifications
+      quote = DeliveryQuote.objects.select_for_update().get(id=pending_quote_id)
+
+      # Mark quote as ready for vendor review
+      quote.status = 'pending'
+      quote.save(update_fields=['status'])
+
+      # Optional: you could also store payment method reference here if needed later
+      # quote.stripe_payment_method_id = session.payment_method   # ← if you add this field
+      # quote.save(update_fields=['status', 'stripe_payment_method_id'])
+
+      # Find the assigned laundry store
+      # (assuming you set external_store_id when creating quote)
+      if quote.external_store_id:
+        try:
+          laundrymart = LaundrymartStore.objects.get(
+            store_id=quote.external_store_id  # or whatever field you use to link
+          )
+          vendor_accept_or_reject_notification(quote, laundrymart)
+
+          print(
+            f"Vendor notified after successful card setup | "
+            f"Quote: {quote.quote_id} → pending | "
+            f"Store: {laundrymart.laundrymart_name}"
+          )
+        except LaundrymartStore.DoesNotExist:
+          print(f"Store not found for quote {quote.quote_id} "
+                         f"(external_store_id: {quote.external_store_id})")
+      else:
+        print(f"No external_store_id set on quote {quote.quote_id}")
+
+    except DeliveryQuote.DoesNotExist:
+      print(f"Quote not found: {pending_quote_id}")
+    except Exception as e:
+      print("Error processing successful card setup webhook")
+
+  return HttpResponse(status=200)
 
 # @csrf_exempt
 # @transaction.atomic
@@ -177,7 +329,7 @@ def add_card_backend(request):
   try:
     # Ensure Stripe customer exists
     if not request.user.stripe_customer_id:
-      customer_result = create_stripe_customer(request.user)
+      customer_result = create_or_get_stripe_customer(request.user)
       if not customer_result:
         return Response({
           'success': False,
