@@ -140,3 +140,26 @@ def create_and_save_delivery(
     ManifestItem.objects.create(delivery=delivery, **item)
 
   return delivery
+
+def _sync_order_status(order, delivery_status, courier_imminent):
+    """
+    Maps Uber delivery status → internal Order status
+    Adjust mapping to your exact needs
+    """
+    status_mapping = {
+      'pending': 'processing',
+      'pickup': 'picked_up' if not courier_imminent else 'pickup_en_route',
+      'pickup_complete': 'picked_up',
+      'dropoff': 'delivery_en_route' if not courier_imminent else 'courier_near_dropoff',
+      'delivered': 'completed',
+      'canceled': 'canceled',
+      'returned': 'return_scheduled',
+    }
+
+    new_status = status_mapping.get(delivery_status)
+    if new_status and order.status != new_status:
+      order.status = new_status
+      print(
+        f"Order {order.uuid} status updated → {new_status} "
+        f"(from delivery status: {delivery_status})"
+      )

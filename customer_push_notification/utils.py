@@ -9,3 +9,9 @@ def customer_create_notification(recipient,category, message, target_url=None, a
       target_url=target_url,
       additional_info=additional_info
   )
+
+def customer_receive_accept_notification(delivery_quote, user):
+  print(f'notification sent to {user.full_name}')
+
+def customer_receive_reject_notification(delivery_quote, user):
+  print(f'notification sent to {user.full_name}')

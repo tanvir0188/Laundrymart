@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from accounts.models import LaundrymartStore
 from customer.serializers import CustomerOrderReportSerializer
+from customer_push_notification.utils import customer_receive_accept_notification, customer_receive_reject_notification
 from laundrymart.permissions import IsStaff
 from payment.models import Order
 from uber.models import DeliveryQuote, ManifestItem
@@ -72,21 +73,26 @@ class AcceptQuoteAPIView(APIView):
       serializer = CreateDeliverySerializer(data=quote_data)
       serializer.is_valid(raise_exception=True)
       validated_data = serializer.validated_data
+      pickup_delivery = None
 
       # 2. Create the Uber pickup delivery
-      is_return_leg = False  # this is always the pickup leg
-      pickup_delivery = create_and_save_delivery(
-        user=quote.customer,
-        validated_data=validated_data,
-        payload=validated_data,
-        is_return_leg=is_return_leg
-      )
+      if quote.service_type in ['full_service', 'drop_off', 'pickup']:
+        pickup_delivery = create_and_save_delivery(
+          user=quote.customer,
+          validated_data=validated_data,
+          payload=validated_data,
+          is_return_leg=False  # this is always pickup leg
+        )
 
-      # 3. Transfer manifest items to the new delivery
-      ManifestItem.objects.filter(delivery_quote=quote).update(
-        delivery=pickup_delivery,
-        # delivery_quote=None  # optional - clear if you want strict separation
-      )
+        ManifestItem.objects.filter(delivery_quote=quote).update(
+          delivery=pickup_delivery,
+          # delivery_quote=None  # optional: clear if you want
+        )
+      try:
+        service_provider = LaundrymartStore.objects.get(store_id=quote.external_store_id)
+      except LaundrymartStore.DoesNotExist:
+        raise ValidationError("Store not found for this quote")
+
 
       # 4. Create the main Order and link pickup delivery
       order = Order.objects.create(
@@ -99,7 +105,7 @@ class AcceptQuoteAPIView(APIView):
         dropoff_latitude=quote.dropoff_latitude,
         dropoff_longitude=quote.dropoff_longitude,
         # Link the pickup delivery
-        pickup_delivery=pickup_delivery,
+        pickup_delivery=pickup_delivery if quote.service_type in ['full_service', 'drop_off'] else None,
         # Initial Uber quote/delivery IDs
         uber_pickup_quote_id=quote.quote_id,
         uber_pickup_delivery_id=pickup_delivery.delivery_uid,
@@ -114,6 +120,7 @@ class AcceptQuoteAPIView(APIView):
       # 5. Finalize quote
       quote.status = 'accepted'
       quote.save(update_fields=['status'])
+      customer_receive_accept_notification(order, quote.customer)
 
       return Response({
         "success": True,
@@ -135,6 +142,30 @@ class AcceptQuoteAPIView(APIView):
         {"error": "Failed to process acceptance. Please contact support."},
         status=500
       )
+
+class RejectQuoteAPIView(APIView):
+  permission_classes = [IsStaff]
+  def patch(self, request, quote_id):
+    quote = get_object_or_404(DeliveryQuote, pk=quote_id)
+
+    # Permission check
+    if not hasattr(request.user, 'laundrymart_store') or str(request.user.laundrymart_store.store_id) != str(quote.external_store_id):
+      return Response({"error": "Unauthorized for this quote"}, status=403)
+
+    if quote.status != 'pending':
+      raise ValidationError(f"Quote must be pending to accept (current: {quote.get_status_display()})")
+    quote.status = 'rejected'
+    quote.save(update_fields=['status'])
+    customer_receive_reject_notification(quote, quote.customer.full_name)
+
+
+    return Response({
+      "success": True,
+      "quote_id": quote.quote_id,
+      "message": "Quote rejected successfully"
+    }, status=status.HTTP_200_OK)
+
+
 
 class DashboardAPIView(APIView):
   permission_classes = [IsStaff]
